@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Questionário — Dependência das Redes Sociais</title>
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Arial,sans-serif;
+  color:#202124;
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255,255,255,.35) 0 55px, transparent 56px),
+    radial-gradient(circle at 85% 15%, rgba(255,255,255,.25) 0 75px, transparent 76px),
+    linear-gradient(135deg,#d9e9ff,#eadcff 45%,#dff6ee);
+}
+body:before{
+  content:"♥   ♡   💬   📱   ☁   ♥   😊   💬   📲";
+  position:fixed;
+  inset:0;
+  opacity:.12;
+  font-size:42px;
+  line-height:2.2;
+  letter-spacing:24px;
+  transform:rotate(-8deg);
+  pointer-events:none;
+}
+.container{
+  max-width:760px;
+  margin:30px auto;
+  padding:20px;
+}
+.card{
+  background:rgba(255,255,255,.94);
+  border-radius:24px;
+  padding:30px;
+  box-shadow:0 12px 35px rgba(60,60,100,.18);
+}
+h1{
+  text-align:center;
+  margin:0 0 8px;
+  font-size:28px;
+}
+.sub{
+  text-align:center;
+  color:#5f6368;
+  line-height:1.5;
+}
+.authors{
+  margin:20px 0 25px;
+  padding:16px;
+  border-radius:16px;
+  background:#f2efff;
+  text-align:center;
+  line-height:1.7;
+}
+.authors strong{display:block;margin-bottom:5px}
+.q{
+  margin:20px 0;
+  padding:20px;
+  border:1px solid #ddd;
+  border-radius:18px;
+  background:#fafafa;
+}
+.q p{font-weight:bold;line-height:1.5;margin-top:0}
+label{
+  display:block;
+  padding:12px;
+  margin:7px 0;
+  border-radius:10px;
+  background:#fff;
+  border:1px solid #e5e5e5;
+  cursor:pointer;
+}
+label:hover{background:#f0f4ff}
+button{
+  width:100%;
+  padding:15px;
+  border:0;
+  border-radius:13px;
+  background:#5b4bb7;
+  color:white;
+  font-size:17px;
+  font-weight:bold;
+  cursor:pointer;
+}
+button:hover{opacity:.9}
+#resultado{
+  display:none;
+  margin-top:25px;
+  padding:25px;
+  border-radius:18px;
+  background:#f3f1ff;
+  text-align:center;
+}
+.score{font-size:38px;font-weight:bold;margin:10px}
+.nivel{font-size:23px;font-weight:bold}
+.obs{font-size:13px;color:#666;line-height:1.5;margin-top:18px}
+.explicacao{
+  text-align:left;
+  margin-top:20px;
+  line-height:1.6;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+  <div style="margin-bottom: 14px;">
+    <a href="/" style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; background: #5b4bb7; color: white; text-decoration: none; font-weight: 800; font-size: 14px; border-radius: 999px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); transition: background 0.2s;">
+      ⬅ Voltar para o Jogo
+    </a>
+  </div>
+<div class="card">
+
+<h1>📱 Questionário — Dependência das Redes Sociais</h1>
+
+<p class="sub">
+Este questionário ajuda a perceber se as redes sociais estão ocupando tempo demais
+na sua rotina e se isso pode estar afetando seu bem-estar.
+</p>
+
+<div class="authors">
+<strong>Autores:</strong>
+Augusto Joaquim Dullius<br>
+Caio Castilho Cercato<br>
+Leonardo Lotermann Dahmer
+</div>
+
+<p>
+<strong>Como responder:</strong> pense nas últimas 2 semanas e escolha a resposta
+que mais combina com o que aconteceu com você.
+</p>
+
+<form id="quiz">
+
+<div class="q">
+<p>1. Você sente vontade de olhar as redes sociais várias vezes ao dia, mesmo sem precisar?</p>
+<label><input type="radio" name="q1" value="0" required> Nunca</label>
+<label><input type="radio" name="q1" value="1"> Alguns dias</label>
+<label><input type="radio" name="q1" value="2"> Mais da metade dos dias</label>
+<label><input type="radio" name="q1" value="3"> Quase todos os dias</label>
+</div>
+
+<div class="q">
+<p>2. Você acha difícil ficar algum tempo sem entrar nas redes sociais?</p>
+<label><input type="radio" name="q2" value="0" required> Nunca</label>
+<label><input type="radio" name="q2" value="1"> Alguns dias</label>
+<label><input type="radio" name="q2" value="2"> Mais da metade dos dias</label>
+<label><input type="radio" name="q2" value="3"> Quase todos os dias</label>
+</div>
+
+<div class="q">
+<p>3. Você fica nas redes sociais por mais tempo do que tinha planejado?</p>
+<label><input type="radio" name="q3" value="0" required> Nunca</label>
+<label><input type="radio" name="q3" value="1"> Alguns dias</label>
+<label><input type="radio" name="q3" value="2"> Mais da metade dos dias</label>
+<label><input type="radio" name="q3" value="3"> Quase todos os dias</label>
+</div>
+
+<div class="q">
+<p>4. Você deixa de estudar, dormir, conversar ou fazer outras coisas para ficar nas redes sociais?</p>
+<label><input type="radio" name="q4" value="0" required> Nunca</label>
+<label><input type="radio" name="q4" value="1"> Alguns dias</label>
+<label><input type="radio" name="q4" value="2"> Mais da metade dos dias</label>
+<label><input type="radio" name="q4" value="3"> Quase todos os dias</label>
+</div>
+
+<div class="q">
+<p>5. Você tenta diminuir o tempo nas redes sociais, mas acaba voltando a usar bastante?</p>
+<label><input type="radio" name="q5" value="0" required> Nunca</label>
+<label><input type="radio" name="q5" value="1"> Alguns dias</label>
+<label><input type="radio" name="q5" value="2"> Mais da metade dos dias</label>
+<label><input type="radio" name="q5" value="3"> Quase todos os dias</label>
+</div>
+
+<button type="submit">Ver meu resultado</button>
+</form>
+
+<div id="resultado">
+<div>Seu resultado</div>
+<div class="score" id="score"></div>
+<div class="nivel" id="nivel"></div>
+<p id="descricao"></p>
+
+<div class="explicacao">
+<strong>O que isso significa?</strong>
+<p>
+Quanto maior a pontuação, mais sinais de que as redes sociais podem estar
+ocupando espaço demais na rotina.
+Em algumas pessoas, o uso exagerado também pode estar ligado a sentimentos
+como preocupação, irritação, dificuldade para descansar ou ansiedade.
+</p>
+</div>
+
+<p class="obs">
+<strong>Importante:</strong> este questionário serve apenas para informação e
+pesquisa escolar. Ele não dá um diagnóstico e não substitui a avaliação de um profissional.
+</p>
+
+<button type="button" onclick="location.reload()">Responder novamente</button>
+</div>
+
+</div>
+
+<footer style="margin-top: 20px; padding: 16px 20px; border-radius: 16px; background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(91, 75, 183, 0.25); text-align: center; box-shadow: 0 4px 16px rgba(60,60,100,0.08);">
+  <p style="margin: 0; font-size: 13.5px; color: #434752; line-height: 1.6;">
+    🎮 <strong>Conexão com o Jogo:</strong> Quem responde ao questionário rápido tem uma prévia diagnóstica sintética (pontuação de 0 a 15), enquanto no jogo vivencia as mesmas questões de forma lúdica, imersiva e com consequências mecânicas imediatas no avatar.
+  </p>
+</footer>
+</div>
+
+<script>
+document.getElementById("quiz").addEventListener("submit",function(e){
+  e.preventDefault();
+
+  let pontos=0;
+  for(let i=1;i<=5;i++){
+    pontos += Number(document.querySelector('input[name="q'+i+'"]:checked').value);
+  }
+
+  let nivel, descricao;
+
+  if(pontos<=3){
+    nivel="Baixo nível de dependência";
+    descricao="Suas respostas mostram poucos sinais de uso problemático das redes sociais.";
+  }else if(pontos<=7){
+    nivel="Nível moderado de dependência";
+    descricao="Suas respostas mostram alguns sinais de que as redes sociais podem estar ocupando mais espaço do que deveriam.";
+  }else if(pontos<=11){
+    nivel="Nível elevado de dependência";
+    descricao="Suas respostas mostram vários sinais de uso problemático das redes sociais.";
+  }else{
+    nivel="Nível muito elevado de dependência";
+    descricao="Suas respostas mostram muitos sinais de uso problemático das redes sociais.";
+  }
+
+  document.getElementById("score").textContent=pontos+"/15";
+  document.getElementById("nivel").textContent=nivel;
+  document.getElementById("descricao").textContent=descricao;
+  document.getElementById("quiz").style.display="none";
+  document.getElementById("resultado").style.display="block";
+  window.scrollTo({top:0,behavior:"smooth"});
+});
+</script>
+
+</body>
+</html>

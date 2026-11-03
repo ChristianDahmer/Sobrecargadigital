@@ -2,13 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Entre redes há ansiedade</title>
-    <meta name="description" content="Simulador interativo e painel de análise diagnóstica sobre o impacto do uso de redes sociais e ansiedade." />
+    <meta name="description" content="Ferramenta interativa de coleta de dados e pesquisa para mensuração do índice de ansiedade (FOMO) e hábitos de uso das redes sociais em grupos." />
+    <meta name="author" content="EEEM Felipe Camarão (Turma 61), Christian Dahmer (Orientador Técnico de Desenvolvimento)" />
+    
+    <!-- PWA Web App Manifest & Android Display Configuration -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ansiedade" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="alternate icon" type="image/png" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph & Social Cards -->
     <meta property="og:title" content="Entre redes há ansiedade" />
-    <meta property="og:description" content="An application built with Google AI Studio." />
+    <meta property="og:description" content="Ferramenta interativa de coleta de dados e pesquisa para mensuração do índice de ansiedade (FOMO) e hábitos de uso das redes sociais em grupos." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(function(err) {
+            console.log('SW registration note:', err);
+          });
+        });
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -121,16 +121,39 @@ export const SAS_QUESTION_DATABASE: SASQuestionItem[] = [
 ];
 
 /**
- * Returns all 100 questions shuffled with Fisher-Yates algorithm
+ * Utility to shuffle an array using Fisher-Yates
  */
-export function getShuffledSASQuestions(): SASQuestion[] {
-  const shuffled = [...SAS_QUESTION_DATABASE];
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
+  return shuffled;
+}
 
-  return shuffled.map((item, idx) => ({
+/**
+ * Returns all 100 questions prioritized:
+ * 1º CRITICO (Críticas)
+ * 2º MEDIO (Médias)
+ * 3º ALTO (Altas)
+ * 4º BAIXO (Baixas)
+ * Shuffled randomly within each category tier.
+ */
+export function getShuffledSASQuestions(): SASQuestion[] {
+  const critico = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'CRITICO');
+  const medio = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'MEDIO');
+  const alto = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'ALTO');
+  const baixo = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'BAIXO');
+
+  const prioritized = [
+    ...shuffleArray(critico),
+    ...shuffleArray(medio),
+    ...shuffleArray(alto),
+    ...shuffleArray(baixo),
+  ];
+
+  return prioritized.map((item, idx) => ({
     id: item.id,
     timeTrigger: (idx + 1) * 10,
     question: item.text,
@@ -188,23 +211,28 @@ export function getEvaluationReliability(totalQuestions: number): {
 }
 
 /**
- * Randomly samples questions from the 100-question database and formats them into SASQuestion objects
- * assigned to the game timer checkpoints (default: 10s, 20s, 30s, 40s, 50s).
+ * Randomly samples questions prioritizing CRITICO and MEDIO questions first,
+ * assigned to game timer checkpoints.
  */
 export function generateRandomSASQuestions(
   timeCheckpoints: number[] = [10, 20, 30, 40, 50]
 ): Record<number, SASQuestion> {
-  // Fisher-Yates shuffle copy of database
-  const shuffled = [...SAS_QUESTION_DATABASE];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
+  const critico = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'CRITICO');
+  const medio = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'MEDIO');
+  const alto = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'ALTO');
+  const baixo = SAS_QUESTION_DATABASE.filter((q) => q.cat === 'BAIXO');
+
+  const prioritized = [
+    ...shuffleArray(critico),
+    ...shuffleArray(medio),
+    ...shuffleArray(alto),
+    ...shuffleArray(baixo),
+  ];
 
   const result: Record<number, SASQuestion> = {};
 
   timeCheckpoints.forEach((timeTrigger, index) => {
-    const item = shuffled[index % shuffled.length];
+    const item = prioritized[index % prioritized.length];
     result[timeTrigger] = {
       timeTrigger,
       question: item.text,

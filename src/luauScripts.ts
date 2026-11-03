@@ -63,12 +63,12 @@ local OBJECT_TYPES = {
 	Feed = { weight = 18, anxiety = 5, speedMod = 0, highlight = nil },
 	Like = { weight = 18, anxiety = 5, speedMod = 0, highlight = Color3.fromRGB(255, 105, 180) },
 	Wifi = { weight = 15, anxiety = 5, speedMod = 0, pointLight = Color3.fromRGB(0, 255, 255) },
-	Geometric = { weight = 12, anxiety = 8, speedMod = 0.2, shape = "Pyramid" },
-	Exercise = { weight = 10, anxiety = -12, speedMod = -0.2, zenTrigger = true, highlight = Color3.fromRGB(34, 197, 94) },
-	Outdoor = { weight = 10, anxiety = -15, speedMod = -0.3, zenTrigger = true, highlight = Color3.fromRGB(16, 185, 129) },
-	Disconnect = { weight = 8, anxiety = -20, speedMod = -0.4, zenTrigger = true, pointLight = Color3.fromRGB(6, 182, 212) },
-	Coffee = { weight = 5, anxiety = -5, speedMod = 0, action = "Guitar", zenTrigger = true },
-	Book = { weight = 4, anxiety = -8, speedMod = -0.2, action = "Slower", zenTrigger = true }
+	Geometric = { weight = 12, anxiety = 5, speedMod = 0.2, shape = "Pyramid" },
+	Exercise = { weight = 10, anxiety = -5, speedMod = -0.2, zenTrigger = true, highlight = Color3.fromRGB(34, 197, 94) },
+	Outdoor = { weight = 10, anxiety = -8, speedMod = -0.3, zenTrigger = true, highlight = Color3.fromRGB(16, 185, 129) },
+	Disconnect = { weight = 8, anxiety = -13, speedMod = -0.4, zenTrigger = true, pointLight = Color3.fromRGB(6, 182, 212) },
+	Coffee = { weight = 5, anxiety = -13, speedMod = 0, action = "Guitar", zenTrigger = true },
+	Book = { weight = 4, anxiety = -2, speedMod = -0.2, action = "Slower", zenTrigger = true }
 }
 
 local activeFallingObjects = {}
@@ -332,7 +332,7 @@ print("[Sobrecarga Digital] GameManager Inicializado com Sucesso.")
     path: 'ServerScriptService/SASNarrativeSystem.server.luau',
     service: 'ServerScriptService',
     type: 'Script',
-    description: 'Sistema narrativo do questionário SAS-SMU. Controla o ciclo de pausas a cada 10s, mantém o SessionData dos jogadores, aplica penalidade de WalkSpeed na física e dispara o Modo Zen.',
+    description: 'Sistema narrativo do questionário SAS-SMU. Controla o ciclo de pausas a cada 15s, mantém o SessionData dos jogadores, aplica penalidade de WalkSpeed na física e dispara o Modo Zen.',
     code: `--[[
     SOBRECARGA DIGITAL - SAS NARRATIVE SYSTEM (SERVER SCRIPT)
     Arquitetura: Roblox Studio (Luau)
@@ -368,10 +368,10 @@ Players.PlayerAdded:Connect(function(player)
 		currentQuestion = nil
 	}
 	
-	-- Inicia o ciclo de perguntas (Pausas a cada 10 segundos)
+	-- Inicia o ciclo de perguntas (Pausas a cada 15 segundos)
 	task.spawn(function()
 		while player.Parent do
-			task.wait(10)
+			task.wait(15)
 			
 			local qData = SASQuestions.GetRandomQuestion()
 			SessionData[player.UserId].currentQuestion = qData

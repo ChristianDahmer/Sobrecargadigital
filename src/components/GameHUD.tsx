@@ -1,11 +1,16 @@
-import React, { useEffect, useRef } from 'react';
-import { GameState, SASQuestion } from '../types';
-import { ShieldCheck, HeartPulse, Sparkles, RefreshCw, Clock, Volume2, VolumeX, Award, Maximize, Minimize, Smartphone, Pause, Play, Instagram } from 'lucide-react';
-import { speakQuestion, playNotificationPopSFX } from '../utils/audio';
+import React, { useState, useEffect, useRef } from 'react';
+import { GameState, SASQuestion, GameSettings, PlayerProfile, CollectedCase, GamepadConfig } from '../types';
+import { ShieldCheck, HeartPulse, Sparkles, RefreshCw, Clock, Volume2, VolumeX, Award, Maximize, Minimize, Smartphone, Pause, Play, Instagram, Settings, Coins, User, FileText, Download, BarChart3, CheckCircle2, Store, Gamepad } from 'lucide-react';
+import { speakQuestion, playNotificationPopSFX, playButtonClickSFX } from '../utils/audio';
 import { QRCodeCard } from './QRCodeCard';
 import { getEvaluationReliability } from '../data/sasQuestions';
+import { exportSingleCaseDossierTxt } from '../utils/caseStorage';
 import researchersImage from '../assets/images/pesquisadores_1787106642560.jpg';
 import instagramLogo from '../assets/images/entreredes_logo_1787106204844.jpg';
+import goldTrophyImage from '../assets/images/gold_trophy_1787171556924.jpg'; // NEW
+import { motion } from 'motion/react'; // NEW
+import { CylindricalJoystickButton } from './CylindricalJoystickButton';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface GameHUDProps {
   gameState: GameState;
@@ -28,8 +33,27 @@ interface GameHUDProps {
   onMovePlayer: (direction: -1 | 1) => void;
   onSetMovingLeft?: (active: boolean) => void;
   onSetMovingRight?: (active: boolean) => void;
+  onSetJumping?: (active: boolean) => void;
+  onSetCrouching?: (active: boolean) => void;
   soundEnabled?: boolean;
   wellnessCount?: number;
+  goldCoinsCount?: number;
+  hasGoldTrophy?: boolean;
+  onOpenControlPanel?: () => void;
+  gameSettings?: GameSettings;
+  graceTimer?: number | null;
+  playerProfile?: PlayerProfile;
+  onOpenPlayerProfileModal?: () => void;
+  onViewInAnalytics?: () => void;
+  lastSavedCase?: CollectedCase | null;
+  medicineSideEffectsActive?: boolean;
+  medicineRemainingSeconds?: number;
+  onOpenShop?: () => void;
+  onOpenHistory?: () => void;
+  gamepadConfig?: GamepadConfig;
+  onlineUsersCount?: number;
+  onUpdateSettings?: (newSettings: Partial<GameSettings>) => void;
+  selectedCharacter?: string;
 }
 
 export const GameHUD: React.FC<GameHUDProps> = ({
@@ -53,9 +77,100 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   onMovePlayer,
   onSetMovingLeft,
   onSetMovingRight,
+  onSetJumping,
+  onSetCrouching,
   soundEnabled = true,
   wellnessCount = 0,
+  goldCoinsCount = 0,
+  hasGoldTrophy = false,
+  onOpenControlPanel,
+  gameSettings,
+  graceTimer = null,
+  playerProfile,
+  onOpenPlayerProfileModal,
+  onViewInAnalytics,
+  lastSavedCase = null,
+  medicineSideEffectsActive = false,
+  medicineRemainingSeconds = 0,
+  onOpenShop,
+  onOpenHistory,
+  gamepadConfig,
+  onlineUsersCount = 1,
+  onUpdateSettings,
+  selectedCharacter = 'guto',
 }) => {
+  const { language, t, getLocalizedQuestion } = useLanguage();
+  const touchStartY = useRef<number | null>(null);
+  const [fps, setFps] = React.useState<number>(60);
+  const frameCountRef = useRef<number>(0);
+  const lastFpsTimeRef = useRef<number>(performance.now());
+
+  useEffect(() => {
+    if (!gameSettings?.showFPSCounter) return;
+    let animId: number;
+    const calcFps = () => {
+      frameCountRef.current += 1;
+      const now = performance.now();
+      if (now - lastFpsTimeRef.current >= 1000) {
+        setFps(Math.round((frameCountRef.current * 1000) / (now - lastFpsTimeRef.current)));
+        frameCountRef.current = 0;
+        lastFpsTimeRef.current = now;
+      }
+      animId = requestAnimationFrame(calcFps);
+    };
+    animId = requestAnimationFrame(calcFps);
+    return () => cancelAnimationFrame(animId);
+  }, [gameSettings?.showFPSCounter]);
+
+  // Immediate visual dismissal of question card to eliminate any perceived click latency
+  const [isQuestionLocallyDismissed, setIsQuestionLocallyDismissed] = useState<boolean>(false);
+  const hasAnsweredCurrentRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    setIsQuestionLocallyDismissed(false);
+    hasAnsweredCurrentRef.current = false;
+  }, [currentQuestion]);
+
+  const handleInstantAnswer = (choiceSim: boolean) => {
+    if (hasAnsweredCurrentRef.current) return;
+    hasAnsweredCurrentRef.current = true;
+    setIsQuestionLocallyDismissed(true);
+    playButtonClickSFX(soundEnabled);
+    onAnswerSAS(choiceSim);
+  };
+  
+  const handleTouchStart = (e: React.TouchEvent, moveAction: (active: boolean) => void) => {
+    e.preventDefault();
+    moveAction(true);
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartY.current === null) return;
+    const currentY = e.touches[0].clientY;
+    const diffY = touchStartY.current - currentY; // positive = up, negative = down
+    
+    if (diffY > 30) {
+      // Swipe Up
+      onSetJumping?.(true);
+      onSetCrouching?.(false);
+    } else if (diffY < -30) {
+      // Swipe Down
+      onSetCrouching?.(true);
+      onSetJumping?.(false);
+    } else {
+      // Return to neutral
+      onSetJumping?.(false);
+      onSetCrouching?.(false);
+    }
+  };
+
+  const handleTouchEnd = (moveAction: (active: boolean) => void) => {
+    moveAction(false);
+    onSetJumping?.(false);
+    onSetCrouching?.(false);
+    touchStartY.current = null;
+  };
   // Track notification pop-ups presence to play alert sounds on disappearance
   const prevPopupsRef = useRef<{ p1: boolean; p2: boolean; p3: boolean; p4: boolean; p5: boolean }>({
     p1: false,
@@ -99,7 +214,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
   const getDiagnostic = (val: number, state: GameState) => {
     if (state === 'DERROTA' || val >= 100) {
       return {
-        title: 'COLAPSO DIGITAL (100%)',
+        title: 'COLAPSO DIGITAL (100%) - GAME OVER',
         badgeColor: 'bg-red-500/20 text-red-400 border-red-500/40',
         desc: 'Seu nível de ansiedade atingiu o limite crítico. O fluxo ininterrupto de notificações e telas sobrecarregou sua mente. Priorize pausas de desconexão e exercícios.',
         recs: [
@@ -170,151 +285,184 @@ export const GameHUD: React.FC<GameHUDProps> = ({
         {/* Left Status Indicator */}
         <div className="pointer-events-auto flex flex-col gap-1.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
-            <span className="text-xs font-bold tracking-[0.2em] uppercase text-red-400">
-              Estado: {gameState}
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center gap-1.5 shadow-[0_0_8px_rgba(16,185,129,0.2)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              🟢 {onlineUsersCount} {onlineUsersCount === 1 ? 'Usuário Online' : 'Usuários Online'}
             </span>
-            {isLandscape && (
-              <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 px-2 py-0.5 rounded-full text-[9px] font-black tracking-widest uppercase flex items-center gap-1">
-                <Smartphone className="w-3 h-3 rotate-90" /> Paisagem (Tela Cheia)
-              </span>
-            )}
           </div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-light tracking-tight text-white uppercase">
-              Entre redes <span className="font-bold text-cyan-400">há ansiedade</span>
-            </h1>
-          </div>
-          {/* Small Beneficial Items Score Counter */}
-          <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl backdrop-blur-md w-fit shadow-lg">
-            <span className="text-xs font-black text-emerald-400">🌿 Pontos Bem-Estar:</span>
-            <span className="text-sm font-mono font-extrabold text-emerald-300">+{wellnessCount} pts</span>
-          </div>
+          {!gameSettings?.hideTrophiesScoreCard && (
+            <div className="flex flex-col gap-1.5">
+            {/* Player Profile & Small Beneficial Items Score Counter */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 rounded-xl backdrop-blur-md w-fit shadow-lg">
+                <span className="text-xs font-black text-emerald-400">🌿 Pontos Bem-Estar:</span>
+                <span className="text-sm font-mono font-extrabold text-emerald-300">+{wellnessCount} pts</span>
+              </div>
+              {gameSettings?.enableGoldCoins !== false && (
+                <div className="flex items-center gap-1.5 bg-amber-500/15 border border-amber-400/40 px-3 py-1 rounded-xl backdrop-blur-md w-fit shadow-lg animate-pulse">
+                  <Coins className="w-4 h-4 text-amber-400" />
+                  <span className="text-xs font-black text-amber-300">Moedas / Saldo:</span>
+                  <span className="text-sm font-mono font-extrabold text-amber-200">
+                    {goldCoinsCount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+              )}
+              {medicineSideEffectsActive && (
+                <div className="flex items-center gap-1.5 bg-rose-500/20 border border-rose-500/40 px-3 py-1 rounded-xl backdrop-blur-md w-fit shadow-lg animate-pulse">
+                  <span className="text-xs animate-bounce">😴</span>
+                  <span className="text-xs font-black text-rose-300">Efeitos Colaterais:</span>
+                  <span className="text-[10px] font-bold text-rose-200 uppercase tracking-wider">
+                    Lentidão ({Math.floor((medicineRemainingSeconds || 0) / 60)}:{String((medicineRemainingSeconds || 0) % 60).padStart(2, '0')})
+                  </span>
+                </div>
+              )}
+            </div>
+              {hasGoldTrophy && (
+                <motion.div
+                  initial={{ rotateY: 0 }}
+                  animate={{ rotateY: 360 }}
+                  transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                  className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 px-3 py-1 rounded-xl backdrop-blur-md w-fit shadow-lg"
+                >
+                  <img src={goldTrophyImage} alt="Troféu de Ouro" className="w-6 h-6 animate-pulse" />
+                  <span className="text-xs font-black text-yellow-400">TROFÉU DE OURO!</span>
+                </motion.div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Center Tempo de Jogo (Sleek Monospace Clock - Crescente) */}
-        <div className="pointer-events-auto flex flex-col items-center gap-1 bg-black/40 border border-white/10 backdrop-blur-xl p-2 sm:p-2.5 rounded-xl shadow-xl">
-          <div className="text-[9px] font-bold text-cyan-300 tracking-widest uppercase flex items-center gap-1">
-            <Clock className="w-3 h-3 text-cyan-400" /> Tempo de Jogo
+        {/* Center Tempo de Jogo */}
+        <div className="pointer-events-auto flex items-center gap-2">
+          <div className="flex flex-col items-center gap-1 bg-black/40 border border-white/10 backdrop-blur-xl p-2 sm:p-2.5 rounded-xl shadow-xl">
+            <div className="text-[9px] font-bold text-cyan-300 tracking-widest uppercase flex items-center gap-1">
+              <Clock className="w-3 h-3 text-cyan-400" /> Tempo de Jogo
+            </div>
+            <div className="text-base sm:text-[22px] font-mono text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]">
+              {String(Math.floor(Math.max(0, gameTimer) / 60)).padStart(2, '0')}:{String(Math.max(0, gameTimer) % 60).padStart(2, '0')}
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-mono text-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-            {String(Math.floor(Math.max(0, gameTimer) / 60)).padStart(2, '0')}:{String(Math.max(0, gameTimer) % 60).padStart(2, '0')}
-          </div>
+
+          {gameSettings?.showFPSCounter && (
+            <div className="flex flex-col items-center justify-center bg-black/60 border border-emerald-500/40 backdrop-blur-xl px-3 py-2 rounded-xl shadow-xl">
+              <span className="text-[8px] font-black text-emerald-400 tracking-widest uppercase">Estatísticas</span>
+              <span className="text-sm font-mono font-bold text-emerald-300">{fps} FPS</span>
+            </div>
+          )}
         </div>
 
         {/* Right Anxiety Bar & Speed Metrics */}
-        <div className="pointer-events-auto flex flex-col items-end gap-2.5 w-64 sm:w-80">
-          <div className="flex justify-between w-full px-1 items-center">
-            <span className="text-xs font-bold tracking-widest uppercase text-red-400 flex items-center gap-1">
-              <HeartPulse className="w-3.5 h-3.5 animate-pulse" /> Nível de Ansiedade
-            </span>
-            <div className="flex items-center gap-2">
-              {anxietyMultiplier > 1.0 && (
-                <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.4)]">
-                  🔥 {anxietyMultiplier.toFixed(1)}x MULT.
-                </span>
-              )}
-              <span className="text-xs font-mono font-bold text-red-400">{anxietyLevel}%</span>
-            </div>
-          </div>
-
-          <div className="w-full h-4 bg-gray-900 rounded-full border border-white/10 p-[2px] shadow-inner">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-green-500 via-orange-500 to-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.max(0, anxietyLevel))}%` }}
-            />
-          </div>
-
-          {/* Small Card: Number of Answered Messages */}
-          <div className="w-full bg-black/60 border border-cyan-400/35 backdrop-blur-md px-2.5 py-1 rounded-lg flex items-center justify-between shadow-lg">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-              <span className="text-[8px] sm:text-[9px] font-bold uppercase tracking-widest text-cyan-300/90">
-                Mensagens Respondidas
+        {!gameSettings?.hideAnxietySpeedCard && (
+          <div className="pointer-events-auto flex flex-col items-end gap-2.5 w-64 sm:w-80">
+            <div className="flex justify-between w-full px-1 items-center">
+              <span className="text-xs font-bold tracking-widest uppercase text-red-400 flex items-center gap-1">
+                <HeartPulse className="w-3.5 h-3.5 animate-pulse" /> Nível de Ansiedade
               </span>
+              <div className="flex items-center gap-2">
+                {anxietyMultiplier > 1.0 && (
+                  <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.4)]">
+                    🔥 {anxietyMultiplier.toFixed(1)}x MULT.
+                  </span>
+                )}
+                <span className="text-xs font-mono font-bold text-red-400">{anxietyLevel}%</span>
+              </div>
             </div>
-            <span className="text-[10px] sm:text-xs font-mono font-black text-cyan-300 bg-cyan-500/15 border border-cyan-400/30 px-1.5 py-0.5 rounded-md shadow-[0_0_8px_rgba(34,211,238,0.2)]">
-              {sessionAnswers.length}
-            </span>
-          </div>
 
-          {/* Dynamic Difficulty Escalation Badge (10+ Questions) */}
-          {sessionAnswers.length >= 10 && (
-            <div className="w-full bg-amber-950/70 border border-amber-400/60 backdrop-blur-md px-2.5 py-1 rounded-lg flex items-center justify-between shadow-lg animate-pulse">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
-                <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-amber-300">
-                  ⚡ Dificuldade Elevada
+            <div className="w-full h-4 bg-gray-900 rounded-full border border-white/10 p-[2px] shadow-inner">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-green-500 via-orange-500 to-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)] transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, anxietyLevel))}%` }}
+              />
+            </div>
+
+            <div className="flex gap-6">
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest">Velocidade</span>
+                <span className="text-sm font-mono text-cyan-400 font-bold">{notificationSpeed.toFixed(1)}x</span>
+              </div>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest">Modo Ativo</span>
+                <span className="text-sm font-mono text-white italic">
+                  {gameState === 'MODO_ZEN' ? 'MODO ZEN' : 'PADRÃO'}
                 </span>
               </div>
-              <span className="text-[9px] sm:text-[10px] font-mono font-black text-amber-200 bg-amber-500/20 border border-amber-400/40 px-1.5 py-0.5 rounded-md shadow-[0_0_8px_rgba(245,158,11,0.3)]">
-                Proteção: {Math.round(Math.max(0.40, 0.80 - Math.max(0, sessionAnswers.length - 10) * 0.04) * 100)}%
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- TOP CENTRAL OVERLAYS (Immunity & Interaction Feedback) --- */}
+      <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[50] flex flex-col items-center gap-2.5 pointer-events-none">
+        {/* CRITICAL GRACE PERIOD COUNTDOWN BANNER (60 SECONDS TO SAVE OR GAME OVER) */}
+        {graceTimer !== null && (
+          <div className="pointer-events-auto px-6 py-3.5 bg-red-950/95 border border-red-500/60 rounded-3xl backdrop-blur-2xl shadow-[0_0_35px_rgba(239,68,68,0.85)] text-center flex flex-col items-center gap-1 animate-pulse">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-red-400 animate-spin" />
+              <span className="text-[10px] font-black tracking-widest text-red-300 uppercase">
+                {sessionAnswers.length < 10 ? '🛡️ IMUNIDADE DE AVALIAÇÃO ATIVA' : '🚨 COLAPSO IMINENTE • DESCONECTE JÁ!'}
               </span>
+            </div>
+            <span className="text-2xl font-mono font-black text-red-500 tracking-wider">
+              {graceTimer}s
+            </span>
+            <span className="text-[6px] font-bold text-red-400 uppercase tracking-widest">
+              {sessionAnswers.length < 10 
+                ? `Responda mais ${10 - sessionAnswers.length} pergunta(s) para habilitar o término!`
+                : 'Colete itens de bem-estar para baixar a ansiedade!'}
+            </span>
+          </div>
+        )}
+
+        {/* IMMEDIATE SAS CHOICE FEEDBACK BANNER (Interaction Label) */}
+        {lastChoiceFeedback && (
+          <div className={`pointer-events-auto px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl animate-fade-in flex items-center gap-2 font-bold text-[8px] uppercase tracking-wider ${
+            lastChoiceFeedback.type === 'SIM'
+              ? 'bg-red-500/20 border-red-500/50 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.3)]'
+              : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
+          }`}>
+            {lastChoiceFeedback.message}
+          </div>
+        )}
+      </div>
+
+      {/* --- FLASHING POP-UPS OVERLAY (SCALES WITH ANSIETY LEVEL) --- */}
+      {(gameState === 'PLAYING' || gameState === 'PAUSED_SAS' || gameState === 'MODO_ZEN') && anxietyLevel > 5 && (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden z-20">
+          {/* Pop-up 1: Lower Left (Base) */}
+          {anxietyLevel > 15 && (
+            <div className="absolute bottom-[100px] sm:bottom-[134px] md:bottom-[169px] left-6 bg-red-950/80 border border-red-500/60 text-red-300 px-3 py-1.5 rounded-xl text-[6px] font-bold tracking-wider uppercase animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.4)] flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              ⚠️ +1 NOTIFICAÇÃO PENDENTE
             </div>
           )}
 
-          <div className="flex gap-6">
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest">Velocidade</span>
-              <span className="text-sm font-mono text-cyan-400 font-bold">{notificationSpeed.toFixed(1)}x</span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] uppercase opacity-40 font-bold tracking-widest">Modo Ativo</span>
-              <span className="text-sm font-mono text-white italic">
-                {gameState === 'MODO_ZEN' ? 'MODO ZEN' : 'PADRÃO'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- IMMEDIATE SAS CHOICE FEEDBACK BANNER --- */}
-      {lastChoiceFeedback && (
-        <div className={`pointer-events-auto self-center px-6 py-3 rounded-2xl border backdrop-blur-xl shadow-2xl animate-fade-in flex items-center gap-2 font-bold text-xs uppercase tracking-wider ${
-          lastChoiceFeedback.type === 'SIM'
-            ? 'bg-red-500/20 border-red-500/50 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.3)]'
-            : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]'
-        }`}>
-          {lastChoiceFeedback.message}
-        </div>
-      )}
-
-      {/* --- FLASHING POP-UPS OVERLAY (SCALES WITH ANSIETY LEVEL) --- */}
-      {(gameState === 'PLAYING' || gameState === 'PAUSED_SAS' || gameState === 'MODO_ZEN') && anxietyLevel >= 25 && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden z-20">
-          {/* Pop-up 1: Top Left */}
-          <div className="absolute top-24 left-6 bg-red-950/80 border border-red-500/60 text-red-300 px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wider uppercase animate-pulse shadow-[0_0_15px_rgba(239,68,68,0.4)] flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-            ⚠️ +1 NOTIFICAÇÃO PENDENTE
-          </div>
-
-          {/* Pop-up 2: Bottom Right (>= 40%) */}
-          {anxietyLevel >= 40 && (
-            <div className="absolute bottom-28 right-8 bg-purple-950/80 border border-purple-500/60 text-purple-300 px-3 py-1.5 rounded-xl text-[10px] font-bold tracking-wider uppercase animate-bounce shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center gap-1.5">
+          {/* Pop-up 2: Lower Right (Base) */}
+          {anxietyLevel > 35 && (
+            <div className="absolute bottom-[100px] sm:bottom-[134px] md:bottom-[169px] right-6 bg-purple-950/80 border border-purple-500/60 text-purple-300 px-3 py-1.5 rounded-xl text-[6px] font-bold tracking-wider uppercase animate-bounce shadow-[0_0_15px_rgba(168,85,247,0.4)] flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
               ❤️ NOVO LIKE NO FEED!
             </div>
           )}
 
-          {/* Pop-up 3: Top Right (>= 60%) */}
-          {anxietyLevel >= 60 && (
-            <div className="absolute top-28 right-10 bg-amber-950/80 border border-amber-500/60 text-amber-300 px-3.5 py-2 rounded-xl text-[10px] font-bold tracking-wider uppercase animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.5)] flex items-center gap-2">
+          {/* Pop-up 3: Lower Right Stacked 1 */}
+          {anxietyLevel > 55 && (
+            <div className="absolute bottom-[140px] sm:bottom-[174px] md:bottom-[209px] right-6 bg-amber-950/80 border border-amber-500/60 text-amber-300 px-3.5 py-2 rounded-xl text-[6px] font-bold tracking-wider uppercase animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.5)] flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
               🔥 FEED ATUALIZADO • VEJA AGORA
             </div>
           )}
 
-          {/* Pop-up 4: Center Left (>= 75%) */}
-          {anxietyLevel >= 75 && (
-            <div className="absolute top-1/2 left-8 -translate-y-1/2 bg-red-900/90 border-2 border-red-500 text-white px-4 py-2.5 rounded-2xl text-xs font-black tracking-widest uppercase animate-bounce shadow-[0_0_30px_rgba(239,68,68,0.8)] flex items-center gap-2">
+          {/* Pop-up 4: Lower Left Stacked 1 */}
+          {anxietyLevel > 75 && (
+            <div className="absolute bottom-[140px] sm:bottom-[174px] md:bottom-[209px] left-6 bg-red-900/90 border-2 border-red-500 text-white px-4 py-2.5 rounded-2xl text-[8px] font-black tracking-widest uppercase animate-bounce shadow-[0_0_30px_rgba(239,68,68,0.8)] flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-red-400 animate-ping" />
               🚨 SOBRECARGA DIGITAL CRÍTICA!
             </div>
           )}
 
-          {/* Pop-up 5: Center Right (>= 85%) */}
-          {anxietyLevel >= 85 && (
-            <div className="absolute top-1/3 right-12 bg-rose-950/90 border-2 border-rose-500 text-rose-200 px-4 py-2.5 rounded-2xl text-xs font-black tracking-widest uppercase animate-pulse shadow-[0_0_35px_rgba(244,63,94,0.9)] flex items-center gap-2">
+          {/* Pop-up 5: Lower Right Stacked 2 */}
+          {anxietyLevel > 90 && (
+            <div className="absolute bottom-[185px] sm:bottom-[219px] md:bottom-[254px] right-6 bg-rose-950/90 border-2 border-rose-500 text-rose-200 px-4 py-2.5 rounded-2xl text-[8px] font-black tracking-widest uppercase animate-pulse shadow-[0_0_35px_rgba(244,63,94,0.9)] flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-rose-400 animate-ping" />
               ⚡ +99 MENSAGENS NÃO LIDAS!
             </div>
@@ -324,14 +472,14 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* --- MODO ZEN BANNER --- */}
       {gameState === 'MODO_ZEN' && (
-        <div className="pointer-events-auto self-center bg-cyan-500/10 border border-cyan-400/30 backdrop-blur-2xl px-8 py-3.5 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.4)] animate-bounce text-center flex items-center gap-3">
+        <div className="pointer-events-auto fixed bottom-[100px] sm:bottom-[134px] md:bottom-[169px] left-1/2 -translate-x-1/2 z-[40] bg-cyan-500/10 border border-cyan-400/30 backdrop-blur-2xl px-8 py-3.5 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.4)] animate-bounce text-center flex items-center gap-3">
           <Sparkles className="w-6 h-6 text-yellow-300 animate-spin" />
           <div className="flex flex-col items-center">
-            <span className="text-lg font-black tracking-[0.3em] uppercase text-cyan-300">
+            <span className="text-[14px] font-black tracking-[0.3em] uppercase text-cyan-300">
               MODO ZEN ATIVO
             </span>
             {zenTriggerReason && (
-              <span className="text-[10px] font-mono tracking-widest text-emerald-300 uppercase">
+              <span className="text-[6px] font-mono tracking-widest text-emerald-300 uppercase">
                 {zenTriggerReason}
               </span>
             )}
@@ -341,9 +489,9 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
 
       {/* --- SLEEK SAS QUESTION MODAL (SYSTEM EVALUATION - TRANSPARENT OVERLAY) --- */}
-      {gameState === 'PAUSED_SAS' && currentQuestion && (
+      {gameState === 'PAUSED_SAS' && currentQuestion && !isQuestionLocallyDismissed && (
         <div className="fixed inset-0 z-[10000] bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 pointer-events-auto">
-          <div className="w-[680px] max-w-full bg-[#090d16]/20 border-2 border-cyan-400/50 rounded-[40px] p-6 sm:p-10 flex flex-col items-center gap-6 sm:gap-8 shadow-[0_0_60px_rgba(34,211,238,0.35)] relative overflow-hidden text-white max-h-[90vh] overflow-y-auto backdrop-blur-md">
+          <div className="w-[540px] max-w-full bg-[#090d16]/30 border-2 border-cyan-400/50 rounded-[32px] p-6 sm:p-8 flex flex-col items-center gap-5 sm:gap-6 shadow-[0_0_50px_rgba(34,211,238,0.3)] relative overflow-hidden text-white max-h-[90vh] overflow-y-auto backdrop-blur-md">
             {/* Top Cyan Accent Line */}
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
 
@@ -351,7 +499,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 <div className="px-4 py-1 bg-cyan-400/20 rounded-full border border-cyan-400/30">
                   <span className="text-[10px] font-black text-cyan-300 tracking-[0.3em] uppercase">
-                    Pergunta nº {sessionAnswers.length + 1} • {currentQuestion.timeTrigger}s
+                    {t('hud.sasQuestion')} nº {sessionAnswers.length + 1} • {currentQuestion.timeTrigger}s
                   </span>
                 </div>
                 {currentQuestion.category && (
@@ -364,52 +512,73 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-300'
                       : 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                   }`}>
-                    Nível {currentQuestion.category}
+                    {currentQuestion.category === 'CRITICO'
+                      ? t('hud.criticalCategory')
+                      : currentQuestion.category === 'ALTO'
+                      ? t('hud.highCategory')
+                      : currentQuestion.category === 'MEDIO'
+                      ? t('hud.mediumCategory')
+                      : t('hud.lowCategory')}
                   </span>
                 )}
-                <button
-                  onClick={() => speakQuestion(currentQuestion.question, true)}
-                  className="px-3 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 rounded-full text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(34,211,238,0.3)] active:scale-95 cursor-pointer"
-                  title="Ouvir pergunta em voz alta"
-                >
-                  <Volume2 className="w-3.5 h-3.5 animate-pulse text-cyan-300" />
-                  <span className="text-[10px] uppercase font-bold tracking-wider">Ouvir Pergunta</span>
-                </button>
+                {!gameSettings?.hideQuestionTTSCard && (
+                  <button
+                    onClick={() => {
+                      const qText = getLocalizedQuestion(currentQuestion.id || 0, currentQuestion.question);
+                      speakQuestion(qText, true, {
+                        voiceURI: gameSettings?.ttsVoiceURI,
+                        pitch: gameSettings?.ttsPitch,
+                        rate: gameSettings?.ttsRate,
+                      }, language);
+                    }}
+                    className="px-3 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 rounded-full text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(34,211,238,0.3)] active:scale-95 cursor-pointer"
+                    title="Audio"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 animate-pulse text-cyan-300" />
+                    <span className="text-[10px] uppercase font-bold tracking-wider">
+                      {language === 'es' ? 'Escuchar' : language === 'en' ? 'Listen' : language === 'de' ? 'Anhören' : 'Ouvir Pergunta'}
+                    </span>
+                  </button>
+                )}
               </div>
-              <h2 className="text-2xl sm:text-3xl font-medium text-center leading-tight max-w-[520px]">
-                {currentQuestion.question}
+              <h2 className="text-xl sm:text-2xl font-medium text-center leading-tight max-w-[440px]">
+                {getLocalizedQuestion(currentQuestion.id || 0, currentQuestion.question)}
               </h2>
             </div>
 
             {/* SIM / NÃO Action Grid */}
-            <div className="flex gap-4 sm:gap-6 w-full px-2 sm:px-8">
+            <div className="flex gap-4 sm:gap-6 w-full px-2 sm:px-4">
               <div className="flex-1 flex flex-col items-center gap-3">
                 <button
-                  onClick={() => onAnswerSAS(true)}
-                  className="w-full py-5 sm:py-6 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl flex items-center justify-center transition-all cursor-pointer transform active:scale-95 group shadow-lg"
+                  id="demo-btn-sim"
+                  onClick={() => handleInstantAnswer(true)}
+                  onPointerDown={() => handleInstantAnswer(true)}
+                  className="w-full py-5 sm:py-6 bg-gradient-to-b from-red-500/30 via-red-600/40 to-red-700/50 hover:from-red-500/40 hover:to-red-600/50 border-2 border-red-400/80 border-b-[6px] border-b-red-700 rounded-2xl flex flex-col items-center justify-center transition-all duration-75 ease-out cursor-pointer transform active:translate-y-[4px] active:border-b-[2px] active:scale-[0.97] active:shadow-inner group shadow-[0_8px_25px_rgba(239,68,68,0.4)] select-none touch-manipulation"
                 >
-                  <span className="text-2xl font-bold tracking-tighter text-red-400 group-hover:text-red-300">
-                    SIM
+                  <span className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] group-active:scale-95 transition-transform">
+                    {t('hud.yes')}
                   </span>
                 </button>
               </div>
 
               <div className="flex-1 flex flex-col items-center gap-3">
                 <button
-                  onClick={() => onAnswerSAS(false)}
-                  className="w-full py-5 sm:py-6 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-2xl flex items-center justify-center transition-all cursor-pointer transform active:scale-95 group shadow-lg"
+                  id="demo-btn-nao"
+                  onClick={() => handleInstantAnswer(false)}
+                  onPointerDown={() => handleInstantAnswer(false)}
+                  className="w-full py-5 sm:py-6 bg-gradient-to-b from-emerald-500/30 via-emerald-600/40 to-emerald-700/50 hover:from-emerald-500/40 hover:to-emerald-600/50 border-2 border-emerald-400/80 border-b-[6px] border-b-emerald-700 rounded-2xl flex flex-col items-center justify-center transition-all duration-75 ease-out cursor-pointer transform active:translate-y-[4px] active:border-b-[2px] active:scale-[0.97] active:shadow-inner group shadow-[0_8px_25px_rgba(16,185,129,0.4)] select-none touch-manipulation"
                 >
-                  <span className="text-2xl font-bold tracking-tighter text-green-400 group-hover:text-green-300">
-                    NÃO
+                  <span className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] group-active:scale-95 transition-transform">
+                    {t('hud.no')}
                   </span>
                 </button>
               </div>
             </div>
 
             {/* Pure Evaluation Purpose Pill & Precision Note */}
-            <div className="bg-black/30 px-6 py-3 rounded-full border border-cyan-400/30 flex items-center justify-center gap-2 text-center max-w-[560px]">
-              <span className="text-xs text-cyan-300 font-medium tracking-wide leading-relaxed">
-                📋 <strong className="font-bold text-white">Precisão do Estudo:</strong> Quanto mais perguntas respondidas, maior é a confiabilidade e profundidade do seu diagnóstico psicométrico.
+            <div className="bg-black/30 px-5 py-2.5 rounded-2xl border border-cyan-400/30 flex items-center justify-center gap-2 text-center max-w-[480px]">
+              <span className="text-[10px] sm:text-xs text-cyan-300 font-medium tracking-wide leading-relaxed">
+                📋 <strong className="font-bold text-white">Precisão do Estudo:</strong> Quanto mais perguntas respondidas, maior é a confiabilidade do diagnóstico.
               </span>
             </div>
           </div>
@@ -418,8 +587,8 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
       {/* --- END GAME DIAGNOSTIC MODAL (MODO CHEIO) --- */}
       {(gameState === 'VITORIA' || gameState === 'DERROTA') && (
-        <div className="pointer-events-auto fixed inset-0 z-[10000] bg-[#050508]/98 overflow-y-auto backdrop-blur-3xl p-4 sm:p-8 md:p-12 text-white overscroll-contain">
-          <div className="w-full max-w-5xl mx-auto flex flex-col gap-8 font-sans animate-fade-in my-4 sm:my-8 pb-16">
+        <div className="pointer-events-auto fixed inset-0 z-[10000] bg-[#050508] overflow-y-auto backdrop-blur-3xl p-4 sm:p-8 md:p-12 text-white overscroll-contain">
+          <div className="w-full max-w-5xl mx-auto flex flex-col gap-8 font-sans animate-fade-in my-4 sm:my-8 pb-40">
             
             {/* Header / Brand Title */}
             <div className="flex flex-col sm:flex-row justify-between items-center border-b border-white/10 pb-6 gap-4">
@@ -447,7 +616,7 @@ export const GameHUD: React.FC<GameHUDProps> = ({
 
               <div className="flex items-center gap-3">
                 <span className={`inline-block text-[10px] font-bold px-3 py-1.5 rounded-full border uppercase tracking-widest ${diag.badgeColor}`}>
-                  {gameState === 'VITORIA' ? 'Sobreviveu à Sobrecarga' : 'Colapso Digital'}
+                  {gameState === 'VITORIA' ? 'Sobreviveu à Sobrecarga' : 'Colapso Digital - GAME OVER'}
                 </span>
               </div>
             </div>
@@ -502,6 +671,16 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                       <li key={idx} className="marker:text-cyan-400">{rec}</li>
                     ))}
                   </ul>
+                </div>
+
+                {/* Play Again Button Moved Above Idealizadores */}
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={onRestart}
+                    className="w-full max-w-md py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-none font-bold rounded-2xl shadow-xl hover:shadow-[0_0_40px_rgba(34,211,238,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2.5 tracking-widest uppercase text-sm cursor-pointer"
+                  >
+                    <RefreshCw className="w-5 h-5 animate-spin" /> Jogar Novamente
+                  </button>
                 </div>
 
                 {/* Dedicated Card for Idealizadores do Projeto */}
@@ -579,8 +758,58 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </div>
               </div>
 
-              {/* Right Side: SAS-SMU Psychometric Evaluation */}
+              {/* Right Side: SAS-SMU Psychometric Evaluation & Case Collection Dossier */}
               <div className="lg:col-span-5 flex flex-col gap-6 text-left">
+                
+                {/* Dedicated Card: Ficha de Coleta de Caso Registrada */}
+                {lastSavedCase && (
+                  <div className="bg-gradient-to-br from-[#090d16] via-cyan-950/20 to-[#090d16] border-2 border-cyan-400/40 p-5 rounded-3xl space-y-4 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3 gap-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-cyan-400" />
+                        <div>
+                          <span className="text-[9px] text-cyan-400 font-mono tracking-widest uppercase block">Registro de Pesquisa</span>
+                          <h4 className="text-sm font-black text-white uppercase tracking-tight">
+                            Coleta de Caso: {lastSavedCase.id}
+                          </h4>
+                        </div>
+                      </div>
+                      <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Registrado
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-black/40 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[9px] text-white/50 uppercase font-bold block">Jogador</span>
+                        <span className="font-bold text-white block truncate">{lastSavedCase.playerName}</span>
+                      </div>
+                      <div className="bg-black/40 p-2.5 rounded-xl border border-white/5">
+                        <span className="text-[9px] text-white/50 uppercase font-bold block">Idade / Tela</span>
+                        <span className="font-bold text-cyan-300 block truncate">{lastSavedCase.age} • {lastSavedCase.dailyScreenHours}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                      {onViewInAnalytics && (
+                        <button
+                          onClick={onViewInAnalytics}
+                          className="flex-1 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-300 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+                        >
+                          <BarChart3 className="w-4 h-4" /> Ver na Coleta de Casos
+                        </button>
+                      )}
+                      <button
+                        onClick={() => exportSingleCaseDossierTxt(lastSavedCase)}
+                        className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                        title="Baixar laudo individual em arquivo texto"
+                      >
+                        <Download className="w-4 h-4" /> Baixar Laudo
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-[#090d16]/80 border border-cyan-400/30 p-6 rounded-3xl space-y-4 shadow-2xl flex flex-col justify-between">
                   
                   <div className="space-y-3">
@@ -631,16 +860,6 @@ export const GameHUD: React.FC<GameHUDProps> = ({
                 </div>
               </div>
 
-            </div>
-
-            {/* Bottom Play Again Control */}
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={onRestart}
-                className="w-full max-w-md py-4 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-none font-bold rounded-2xl shadow-xl hover:shadow-[0_0_40px_rgba(34,211,238,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2.5 tracking-widest uppercase text-sm cursor-pointer"
-              >
-                <RefreshCw className="w-5 h-5 animate-spin" /> Jogar Novamente
-              </button>
             </div>
 
           </div>
@@ -702,11 +921,11 @@ export const GameHUD: React.FC<GameHUDProps> = ({
       )}
 
       {/* --- LATERAL SCREEN MOVEMENT CONTROLS (LOCATED ON SIDES OF SCREEN) --- */}
-      {(gameState === 'PLAYING' || gameState === 'MODO_ZEN' || gameState === 'PAUSED') && (
+      {(gameState === 'PLAYING' || gameState === 'MODO_ZEN' || gameState === 'PAUSED') && !gameSettings?.hideControlsCard && (
         <>
           {/* Center-placed 'Ver Avaliação do Estudo' panel when at least 10 questions answered */}
           {sessionAnswers.length >= 10 && (
-            <div className="pointer-events-auto fixed bottom-24 sm:bottom-28 md:bottom-24 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 w-full max-w-[280px] sm:max-w-[400px] md:max-w-[480px] animate-pulse">
+            <div className="pointer-events-auto fixed bottom-[100px] sm:bottom-[134px] md:bottom-[169px] left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-1.5 w-full max-w-[280px] sm:max-w-[400px] md:max-w-[480px] animate-pulse">
               <button
                 onClick={onFinishEvaluation}
                 className="w-full py-3 px-5 sm:py-4 sm:px-8 bg-gradient-to-r from-emerald-500 via-cyan-500 to-blue-600 hover:from-emerald-400 hover:to-cyan-450 text-white font-black text-xs uppercase tracking-widest rounded-full shadow-[0_0_35px_rgba(34,211,238,0.6)] hover:scale-102 active:scale-95 transition-all flex items-center justify-center gap-2 border border-cyan-300/40 cursor-pointer"
@@ -724,110 +943,142 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             </div>
           )}
 
-          {/* Left Lateral Movement Button */}
-          <div className="pointer-events-auto fixed left-2 sm:left-4 md:left-8 bottom-4 sm:bottom-8 md:bottom-12 z-30">
-            <button
-              onMouseDown={(e) => { e.preventDefault(); onSetMovingLeft?.(true); }}
-              onMouseUp={(e) => { e.preventDefault(); onSetMovingLeft?.(false); }}
-              onMouseLeave={() => onSetMovingLeft?.(false)}
-              onTouchStart={(e) => { e.preventDefault(); onSetMovingLeft?.(true); }}
-              onTouchEnd={(e) => { e.preventDefault(); onSetMovingLeft?.(false); }}
-              onContextMenu={(e) => { e.preventDefault(); }}
-              onClick={(e) => { e.preventDefault(); onMovePlayer(-1); }}
-              className="touch-control-btn w-14 h-14 sm:w-18 sm:h-18 md:w-22 md:h-22 bg-black/65 hover:bg-cyan-500/30 active:bg-cyan-500/60 border-2 border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white rounded-3xl backdrop-blur-xl shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:shadow-[0_0_50px_rgba(34,211,238,0.6)] flex flex-col items-center justify-center gap-1 select-none active:scale-95 transition-all cursor-pointer group"
-              title="Mover para a Esquerda (Tecla A ou Seta Esquerda)"
-            >
-              <span className="text-xl sm:text-2xl font-black group-hover:-translate-x-1 transition-transform">◀</span>
-              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-cyan-200">ESQUERDA</span>
-            </button>
+          {/* Left Lateral Controls Group (Esquerda) */}
+          <div className={`pointer-events-auto fixed left-2 sm:left-4 md:left-8 bottom-4 sm:bottom-8 md:bottom-12 z-30 flex items-center gap-2 sm:gap-3 md:gap-4 transition-transform duration-300 ${
+            gameSettings?.touchButtonsSize === 'pequeno' ? 'scale-85 origin-bottom-left' : gameSettings?.touchButtonsSize === 'grande' ? 'scale-115 origin-bottom-left' : 'scale-100'
+          }`}>
+            <CylindricalJoystickButton
+              direction="left"
+              label="ESQUERDA"
+              icon="◀"
+              colorTheme="cyan"
+              size="lg"
+              onSetMovingLeft={onSetMovingLeft}
+              onSetMovingRight={onSetMovingRight}
+              onSetJumping={onSetJumping}
+              onSetCrouching={onSetCrouching}
+              onMovePlayer={onMovePlayer}
+            />
           </div>
 
-          {/* Right Lateral Controls Group (All buttons placed side-by-side on the SAME horizontal line) */}
-          <div className="pointer-events-auto fixed right-2 sm:right-4 md:right-8 bottom-4 sm:bottom-8 md:bottom-12 z-30 flex items-center gap-1.5 sm:gap-2.5 md:gap-3">
-            {onTogglePause && (
-              <button
-                onClick={onTogglePause}
-                onContextMenu={(e) => { e.preventDefault(); }}
-                className={`touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 ${
-                  gameState === 'PAUSED'
-                    ? 'bg-amber-500/40 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-                    : 'bg-black/65 hover:bg-amber-500/20 active:bg-amber-500/50 border border-amber-400/50 hover:border-amber-300 text-amber-300 active:text-white'
-                } rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group`}
-                title={gameState === 'PAUSED' ? "Continuar Jogo (P)" : "Pausar Jogo (P)"}
-              >
-                {gameState === 'PAUSED' ? (
-                  <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300 fill-amber-300/40" />
-                ) : (
-                  <Pause className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
-                )}
-                <span className="text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight text-amber-200 mt-0.5 leading-none">
-                  {gameState === 'PAUSED' ? 'RETOMAR' : 'PAUSA'}
-                </span>
-              </button>
-            )}
+          {/* Center Control Buttons Group (Pausa, Áudio, Reinício, Controle, Tela) */}
+          <div className={`pointer-events-auto fixed left-1/2 -translate-x-1/2 bottom-4 sm:bottom-8 md:bottom-12 z-30 flex items-center gap-1.5 sm:gap-2.5 md:gap-3 transition-transform duration-300 ${
+            gameSettings?.touchButtonsSize === 'pequeno' ? 'scale-85 origin-bottom' : gameSettings?.touchButtonsSize === 'grande' ? 'scale-115 origin-bottom' : 'scale-100'
+          }`}>
+            <div className="flex items-center gap-1.5 sm:gap-2.5 md:gap-3 scale-85 origin-bottom">
+              {onTogglePause && (
+                <button
+                  onClick={onTogglePause}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className={`touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 ${
+                    gameState === 'PAUSED'
+                      ? 'bg-amber-500/40 border border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                      : 'bg-black/65 hover:bg-amber-500/20 active:bg-amber-500/50 border border-amber-400/50 hover:border-amber-300 text-amber-300 active:text-white'
+                  } rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group`}
+                  title={gameState === 'PAUSED' ? "Continuar Jogo (P)" : "Pausar Jogo (P)"}
+                >
+                  {gameState === 'PAUSED' ? (
+                    <Play className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-300 fill-amber-300/40" />
+                  ) : (
+                    <Pause className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-amber-400" />
+                  )}
+                </button>
+              )}
 
-            {onToggleSound && (
-              <button
-                onClick={onToggleSound}
-                onContextMenu={(e) => { e.preventDefault(); }}
-                className={`touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 ${
-                  !soundEnabled
-                    ? 'bg-rose-500/40 border border-rose-400 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.5)]'
-                    : 'bg-black/65 hover:bg-cyan-500/20 active:bg-cyan-500/50 border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white'
-                } rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group`}
-                title={soundEnabled ? "Desligar Áudio" : "Ligar Áudio"}
-              >
-                {soundEnabled ? (
-                  <Volume2 className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" />
-                ) : (
-                  <VolumeX className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-rose-400" />
-                )}
-                <span className={`text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight mt-0.5 leading-none ${!soundEnabled ? 'text-rose-200' : 'text-cyan-200'}`}>
-                  {soundEnabled ? 'ÁUDIO' : 'MUTO'}
-                </span>
-              </button>
-            )}
+              {onToggleSound && (
+                <button
+                  onClick={onToggleSound}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className={`touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 ${
+                    !soundEnabled
+                      ? 'bg-rose-500/40 border border-rose-400 text-rose-300 shadow-[0_0_15px_rgba(244,63,94,0.5)]'
+                      : 'bg-black/65 hover:bg-cyan-500/20 active:bg-cyan-500/50 border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white'
+                  } rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group`}
+                  title={soundEnabled ? "Desligar Áudio" : "Ligar Áudio"}
+                >
+                  {soundEnabled ? (
+                    <Volume2 className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" />
+                  ) : (
+                    <VolumeX className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-rose-400" />
+                  )}
+                </button>
+              )}
 
-            {onRestart && (
-              <button
-                onClick={onRestart}
-                onContextMenu={(e) => { e.preventDefault(); }}
-                className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-emerald-500/20 active:bg-emerald-500/50 border border-emerald-400/50 hover:border-emerald-300 text-emerald-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
-                title="Reiniciar Partida"
-              >
-                <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-400 group-hover:rotate-180 transition-transform duration-500" />
-                <span className="text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight text-emerald-200 mt-0.5 leading-none">
-                  REINICIAR
-                </span>
-              </button>
-            )}
+              {onRestart && (
+                <button
+                  onClick={onRestart}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-emerald-500/20 active:bg-emerald-500/50 border border-emerald-400/50 hover:border-emerald-300 text-emerald-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
+                  title="Reiniciar Partida"
+                >
+                  <RefreshCw className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-emerald-400 group-hover:rotate-180 transition-transform duration-500" />
+                </button>
+              )}
 
-            {onToggleFullscreen && (
-              <button
-                onClick={onToggleFullscreen}
-                onContextMenu={(e) => { e.preventDefault(); }}
-                className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-cyan-500/30 active:bg-cyan-500/60 border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
-                title={isFullscreen ? "Sair da Tela Cheia" : "Alternar Tela Cheia"}
-              >
-                {isFullscreen ? <Minimize className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" /> : <Maximize className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" />}
-                <span className="text-[6.5px] sm:text-[7.5px] font-black uppercase tracking-tight text-cyan-200 mt-0.5 leading-none">TELA</span>
-              </button>
-            )}
+              {onOpenControlPanel && (
+                <button
+                  onClick={onOpenControlPanel}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-purple-500/20 active:bg-purple-500/50 border border-purple-400/50 hover:border-purple-300 text-purple-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
+                  title="Configurações e Parâmetros do Jogo"
+                >
+                  <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-purple-300 group-hover:rotate-90 transition-transform duration-300" />
+                </button>
+              )}
 
-            <button
-              onMouseDown={(e) => { e.preventDefault(); onSetMovingRight?.(true); }}
-              onMouseUp={(e) => { e.preventDefault(); onSetMovingRight?.(false); }}
-              onMouseLeave={() => onSetMovingRight?.(false)}
-              onTouchStart={(e) => { e.preventDefault(); onSetMovingRight?.(true); }}
-              onTouchEnd={(e) => { e.preventDefault(); onSetMovingRight?.(false); }}
-              onContextMenu={(e) => { e.preventDefault(); }}
-              onClick={(e) => { e.preventDefault(); onMovePlayer(1); }}
-              className="touch-control-btn w-14 h-14 sm:w-18 sm:h-18 md:w-22 md:h-22 bg-black/65 hover:bg-cyan-500/30 active:bg-cyan-500/60 border-2 border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white rounded-3xl backdrop-blur-xl shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:shadow-[0_0_50px_rgba(34,211,238,0.6)] flex flex-col items-center justify-center gap-1 select-none active:scale-95 transition-all cursor-pointer group"
-              title="Mover para a Direita (Tecla D ou Seta Direita)"
-            >
-              <span className="text-xl sm:text-2xl font-black group-hover:translate-x-1 transition-transform">▶</span>
-              <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-cyan-200">DIREITA</span>
-            </button>
+              {/* Shop Button */}
+              {onOpenShop && (
+                <button
+                  onClick={onOpenShop}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-amber-500/20 active:bg-amber-500/50 border border-amber-400/50 hover:border-amber-300 text-amber-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
+                  title="Loja de Habilidades"
+                >
+                  <Store className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400 group-hover:scale-110 transition-transform duration-300" />
+                </button>
+              )}
+
+              {/* History Button */}
+              {onOpenHistory && (
+                <button
+                  onClick={onOpenHistory}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-emerald-500/20 active:bg-emerald-500/50 border border-emerald-400/50 hover:border-emerald-300 text-emerald-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
+                  title="Ver Histórico de Partidas"
+                >
+                  <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400 group-hover:scale-110 transition-transform duration-300" />
+                </button>
+              )}
+
+              {onToggleFullscreen && (
+                <button
+                  onClick={onToggleFullscreen}
+                  onContextMenu={(e) => { e.preventDefault(); }}
+                  className="touch-control-btn w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 bg-black/65 hover:bg-cyan-500/30 active:bg-cyan-500/60 border border-cyan-400/50 hover:border-cyan-300 text-cyan-300 active:text-white rounded-2xl backdrop-blur-xl shadow-lg flex flex-col items-center justify-center select-none active:scale-95 transition-all cursor-pointer group"
+                  title={isFullscreen ? "Sair da Tela Cheia" : "Alternar Tela Cheia"}
+                >
+                  {isFullscreen ? <Minimize className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" /> : <Maximize className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-cyan-400" />}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Right Lateral Controls Group (Esquerda) */}
+          <div className={`pointer-events-auto fixed right-2 sm:right-4 md:right-8 bottom-4 sm:bottom-8 md:bottom-12 z-30 flex items-center transition-transform duration-300 ${
+            gameSettings?.touchButtonsSize === 'pequeno' ? 'scale-85 origin-bottom-right' : gameSettings?.touchButtonsSize === 'grande' ? 'scale-115 origin-bottom-right' : 'scale-100'
+          }`}>
+            <CylindricalJoystickButton
+              direction="right"
+              label="DIREITA"
+              icon="▶"
+              colorTheme="cyan"
+              size="lg"
+              onSetMovingLeft={onSetMovingLeft}
+              onSetMovingRight={onSetMovingRight}
+              onSetJumping={onSetJumping}
+              onSetCrouching={onSetCrouching}
+              onMovePlayer={onMovePlayer}
+            />
           </div>
         </>
       )}

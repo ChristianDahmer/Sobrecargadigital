@@ -1,0 +1,68 @@
+{
+  "project_id": "dazzling-ally-5bg1d",
+  "auth": {
+    "providers": ["anonymous"]
+  },
+  "firestore": {
+    "collections": {
+      "users": {
+        "description": "Store user's total resources and profile.",
+        "document_id": "userId (uid)",
+        "fields": {
+          "totalCoins": "number",
+          "createdAt": "timestamp"
+        }
+      },
+      "sessions": {
+        "description": "Store history of each evaluation run.",
+        "document_id": "auto-generated",
+        "fields": {
+          "userId": "string (uid)",
+          "timeSurvived": "number",
+          "maxAnxiety": "number",
+          "coinsCollected": "number",
+          "result": "string",
+          "timestamp": "timestamp"
+        }
+      },
+      "collectedCases": {
+        "description": "Store player diagnosis cases collected from gameplay and clinical research independently of recompilations.",
+        "document_id": "caseId (e.g., CASO-001)",
+        "fields": {
+          "id": "string",
+          "playerName": "string",
+          "anonymousCode": "string",
+          "age": "string",
+          "dailyScreenHours": "string",
+          "schoolGrade": "string",
+          "timestamp": "number",
+          "dateFormatted": "string",
+          "gameStateOutcome": "string",
+          "totalQuestionsAnswered": "number",
+          "yesAnswers": "number",
+          "noAnswers": "number",
+          "affirmativePercentage": "number",
+          "finalAnxietyScore": "number",
+          "finalWalkSpeed": "number",
+          "fomoCategory": "string",
+          "survivalRate": "number",
+          "wellnessScore": "number",
+          "goldCoins": "number",
+          "criticalResponseTime": "number",
+          "source": "string",
+          "diagnosticTitle": "string",
+          "diagnosticDescription": "string",
+          "recommendations": "array"
+        }
+      },
+      "presence": {
+        "description": "Real-time active user presence / heartbeats for HUD count.",
+        "document_id": "userId (uid or random fallback)",
+        "fields": {
+          "lastActive": "timestamp",
+          "username": "string"
+        }
+      }
+    }
+  }
+}

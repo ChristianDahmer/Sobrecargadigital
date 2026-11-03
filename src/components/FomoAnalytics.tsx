@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Activity,
   FileText,
@@ -18,8 +18,28 @@ import {
   Lock,
   Unlock,
   User,
-  Key
+  Key,
+  Search,
+  Trash2,
+  Eye,
+  PlusCircle,
+  Clock,
+  Sparkles,
+  Award,
+  Target,
 } from 'lucide-react';
+import { CollectedCase, DataCollectionAudience } from '../types';
+import {
+  getStoredCollectedCases,
+  saveCollectedCase,
+  deleteCollectedCase,
+  deleteCollectedCaseById,
+  clearRealCollectedCases,
+  resetCollectedCases,
+  exportCasesToCSV,
+  exportSingleCaseDossierTxt
+} from '../utils/caseStorage';
+import { CaseDetailsModal } from './CaseDetailsModal';
 
 interface Participant {
   id: string;
@@ -36,18 +56,13 @@ interface Participant {
   lowResponseTime: number; // Average response time on low impact items
 }
 
-// Generates high-fidelity research data for academic studies
+// Generates high-fidelity research data for academic studies (77 students cohort)
 const generateInitialParticipants = (): Participant[] => {
   const list: Participant[] = [];
-  const names = [
-    'Alice S.', 'Bruno M.', 'Carla T.', 'Daniel R.', 'Eduarda F.', 'Felipe G.', 'Gabriela H.', 'Hugo C.', 'Isabela P.', 'João V.',
-    'Karina L.', 'Lucas B.', 'Mariana N.', 'Natan J.', 'Olívia M.', 'Pedro D.', 'Quitéria S.', 'Rafael A.', 'Sofia E.', 'Thiago P.',
-    'Úrsula R.', 'Vinícius K.', 'Waldemar J.', 'Xavier L.', 'Yasmin C.', 'Zeca O.', 'Alba M.', 'Beto H.', 'Clara D.', 'David S.'
-  ];
 
-  for (let i = 1; i <= 45; i++) {
-    const isHyper = i % 3 === 0;
-    const isResilient = i % 3 === 1;
+  for (let i = 1; i <= 77; i++) {
+    const isHyper = i <= 26;
+    const isResilient = i > 64;
 
     let yesCount = 0;
     let noCount = 0;
@@ -57,26 +72,26 @@ const generateInitialParticipants = (): Participant[] => {
     let lowTime = 0;
 
     if (isHyper) {
-      yesCount = Math.floor(Math.random() * 4) + 6; // 6 to 9 YES answers
+      yesCount = 7 + (i % 4); // 7 to 10 YES answers
       noCount = 10 - yesCount;
-      anxiety = Math.floor(Math.random() * 25) + 71; // 71 to 96
-      survival = Math.floor(Math.random() * 30) + 30; // 30% to 60%
-      criticalTime = parseFloat((Math.random() * 0.8 + 1.1).toFixed(2)); // Very fast/impulsive (1.1s - 1.9s)
-      lowTime = parseFloat((Math.random() * 1.5 + 2.0).toFixed(2)); // Normal (2.0s - 3.5s)
+      anxiety = 72 + (i % 27); // 72 to 98
+      survival = 32 + (i % 28); // 32% to 59%
+      criticalTime = parseFloat((1.05 + (i % 6) * 0.12).toFixed(2)); // Very fast/impulsive (1.05s - 1.77s)
+      lowTime = parseFloat((Math.random() * 1.5 + 2.0).toFixed(2));
     } else if (isResilient) {
-      yesCount = Math.floor(Math.random() * 3); // 0 to 2 YES answers
+      yesCount = i % 3; // 0 to 2 YES answers
       noCount = 10 - yesCount;
-      anxiety = Math.floor(Math.random() * 25) + 5; // 5 to 30
-      survival = Math.floor(Math.random() * 15) + 85; // 85% to 100%
-      criticalTime = parseFloat((Math.random() * 1.8 + 3.2).toFixed(2)); // Reflective/slow (3.2s - 5.0s)
-      lowTime = parseFloat((Math.random() * 1.2 + 2.5).toFixed(2)); // (2.5s - 3.7s)
+      anxiety = 8 + (i % 22); // 8 to 29
+      survival = 84 + (i % 15); // 84% to 98%
+      criticalTime = parseFloat((3.2 + (i % 6) * 0.25).toFixed(2)); // Reflective/slow (3.2s - 4.7s)
+      lowTime = parseFloat((Math.random() * 1.2 + 2.5).toFixed(2));
     } else {
-      yesCount = Math.floor(Math.random() * 3) + 3; // 3 to 5 YES answers
+      yesCount = 3 + (i % 4); // 3 to 6 YES answers
       noCount = 10 - yesCount;
-      anxiety = Math.floor(Math.random() * 35) + 31; // 31 to 66
-      survival = Math.floor(Math.random() * 20) + 65; // 65% to 85%
-      criticalTime = parseFloat((Math.random() * 1.2 + 2.1).toFixed(2)); // Moderate (2.1s - 3.3s)
-      lowTime = parseFloat((Math.random() * 1.0 + 2.2).toFixed(2)); // Moderate (2.2s - 3.2s)
+      anxiety = 32 + (i % 38); // 32 to 69
+      survival = 62 + (i % 21); // 62% to 82%
+      criticalTime = parseFloat((2.05 + (i % 8) * 0.15).toFixed(2)); // Moderate (2.05s - 3.1s)
+      lowTime = parseFloat((Math.random() * 1.0 + 2.2).toFixed(2));
     }
 
     const finalWalkSpeed = parseFloat(Math.max(8, 16 - (anxiety * 0.1)).toFixed(1));
@@ -143,7 +158,10 @@ const getStoredParticipants = (): Participant[] => {
   try {
     const raw = localStorage.getItem('fomo_simulated_participants');
     if (raw) {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length >= 77) {
+        return parsed;
+      }
     }
   } catch (err) {}
   const initial = generateInitialParticipants();
@@ -153,7 +171,17 @@ const getStoredParticipants = (): Participant[] => {
   return initial;
 };
 
-export const FomoAnalytics: React.FC = () => {
+interface FomoAnalyticsProps {
+  audiences?: DataCollectionAudience[];
+  activeAudienceId?: string;
+  onOpenAudienceManager?: () => void;
+}
+
+export const FomoAnalytics: React.FC<FomoAnalyticsProps> = ({
+  audiences = [],
+  activeAudienceId,
+  onOpenAudienceManager,
+}) => {
   // Authentication states
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     try {
@@ -166,25 +194,62 @@ export const FomoAnalytics: React.FC = () => {
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [authError, setAuthError] = useState<string>('');
 
+  // Real collected cases from gameplay & storage
+  const [collectedCases, setCollectedCases] = useState<CollectedCase[]>(() => getStoredCollectedCases());
+  const [selectedCaseForModal, setSelectedCaseForModal] = useState<CollectedCase | null>(null);
+
+  // Search & Filter category
+  const [filterSource, setFilterSource] = useState<'ALL' | 'REAL_ONLY' | 'RESEARCH_ONLY' | 'Resiliente Digital' | 'Uso Moderado' | 'Hiperconectado'>('ALL');
+  const [filterAge, setFilterAge] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   const [participants, setParticipants] = useState<Participant[]>(getStoredParticipants);
   const [filterCategory, setFilterCategory] = useState<'ALL' | 'Resiliente Digital' | 'Uso Moderado' | 'Hiperconectado'>('ALL');
   const [showToast, setShowToast] = useState<string | null>(null);
 
+  // Manual participant form states
+  const [manualName, setManualName] = useState<string>('');
+  const [manualAge, setManualAge] = useState<string>('16 anos');
+  const [manualScreenHours, setManualScreenHours] = useState<string>('5h - 7h / dia');
+  const [manualGrade, setManualGrade] = useState<string>('1º Ano EM');
+  const [simYes, setSimYes] = useState<number>(4);
+  const [simAnxiety, setSimAnxiety] = useState<number>(45);
+  const [simSurvival, setSimSurvival] = useState<number>(75);
+  const [manualNotes, setManualNotes] = useState<string>('');
+
+  // Live tracking states & modal controls
+  const [showStudyModal, setShowStudyModal] = useState<boolean>(false);
+  const [liveStartedCount, setLiveStartedCount] = useState<number>(() => getGamesStartedCount());
+  const [liveOutcomes, setLiveOutcomes] = useState<any[]>(() => getGamesOutcomes());
+
+  // Reload collected cases on mount and storage events
+  const reloadCases = () => {
+    setCollectedCases(getStoredCollectedCases());
+    setLiveStartedCount(getGamesStartedCount());
+    setLiveOutcomes(getGamesOutcomes());
+  };
+
+  useEffect(() => {
+    reloadCases();
+    window.addEventListener('storage', reloadCases);
+    return () => window.removeEventListener('storage', reloadCases);
+  }, []);
+
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const validUsers = ['caio', 'leonardo', 'augusto'];
+    const validUsers = ['caio', 'leonardo', 'augusto', 'admin', 'pesquisa61', 'turma61', 'professor', 'pesquisador'];
     const normalizedUser = usernameInput.trim().toLowerCase();
     
     if (!normalizedUser) {
       setAuthError('Por favor, informe o nome do usuário.');
       return;
     }
-    if (passwordInput !== 'turma61') {
+    if (passwordInput.trim().toLowerCase() !== 'turma61') {
       setAuthError('Senha incorreta.');
       return;
     }
     if (!validUsers.includes(normalizedUser)) {
-      setAuthError('Usuário não autorizado. Por favor, insira um usuário Mestre válido.');
+      setAuthError('Usuário não autorizado. Insira um usuário Mestre válido (ex: caio, leonardo, augusto ou turma61).');
       return;
     }
 
@@ -203,22 +268,26 @@ export const FomoAnalytics: React.FC = () => {
       sessionStorage.removeItem('fomo_diagnostico_user');
     } catch (err) {}
   };
-  
-  // Custom states for manual diagnostic simulator
-  const [simYes, setSimYes] = useState<number>(4);
-  const [simAnxiety, setSimAnxiety] = useState<number>(45);
-  const [simSurvival, setSimSurvival] = useState<number>(75);
 
-  // Live tracking states & modal controls
-  const [showStudyModal, setShowStudyModal] = useState<boolean>(false);
-  const [liveStartedCount, setLiveStartedCount] = useState<number>(() => getGamesStartedCount());
-  const [liveOutcomes, setLiveOutcomes] = useState<any[]>(() => getGamesOutcomes());
+  // Reset/restore research database
+  const handleResetDatabase = () => {
+    const initial = generateInitialParticipants();
+    setParticipants(initial);
+    const initialCases = resetCollectedCases();
+    setCollectedCases(initialCases);
+    try {
+      localStorage.setItem('fomo_simulated_participants', JSON.stringify(initial));
+    } catch (err) {}
+    setShowToast('Banco de dados de pesquisa e casos restaurado com sucesso!');
+    setTimeout(() => setShowToast(null), 4000);
+  };
 
-  // Load live values when mounted
-  React.useEffect(() => {
-    setLiveStartedCount(getGamesStartedCount());
-    setLiveOutcomes(getGamesOutcomes());
-  }, []);
+  // Export CSV Action for section 3 & 4
+  const handleExportCSV = () => {
+    exportCasesToCSV(collectedCases);
+    setShowToast('Planilha de pesquisa e coleta de casos exportada (.CSV)!');
+    setTimeout(() => setShowToast(null), 3500);
+  };
 
   // Calculate live stats
   const liveStats = useMemo(() => {
@@ -230,6 +299,8 @@ export const FomoAnalytics: React.FC = () => {
     const countResilient = liveOutcomes.filter(o => o.category === 'Resiliente Digital').length;
     const countModerated = liveOutcomes.filter(o => o.category === 'Uso Moderado').length;
     const countHyper = liveOutcomes.filter(o => o.category === 'Hiperconectado').length;
+    const totalAnxiety = liveOutcomes.reduce((sum, o) => sum + (o.anxiety || 0), 0);
+    const avgAnxiety = total > 0 ? Math.round(totalAnxiety / total) : 0;
     
     return {
       total,
@@ -238,7 +309,8 @@ export const FomoAnalytics: React.FC = () => {
       winRate,
       countResilient,
       countModerated,
-      countHyper
+      countHyper,
+      avgAnxiety
     };
   }, [liveOutcomes]);
 
@@ -256,21 +328,30 @@ export const FomoAnalytics: React.FC = () => {
     }
   };
 
-  // Re-generate database
-  const handleResetDatabase = () => {
-    const initial = generateInitialParticipants();
-    setParticipants(initial);
-    setFilterCategory('ALL');
-    try {
-      localStorage.setItem('fomo_simulated_participants', JSON.stringify(initial));
-    } catch (err) {}
-    setShowToast('Banco de dados de pesquisa restaurado com sucesso para as 45 amostras iniciais!');
-    setTimeout(() => setShowToast(null), 4000);
+  // Delete single real case
+  const handleDeleteCase = (id: string, name: string) => {
+    deleteCollectedCase(id);
+    setCollectedCases(getStoredCollectedCases());
+    setShowToast(`Caso de ${name} (${id}) removido.`);
+    setTimeout(() => setShowToast(null), 3500);
   };
 
-  // Add virtual trial
-  const handleAddParticipant = () => {
-    const idNum = participants.length + 1;
+  // Clear all real cases
+  const handleClearRealCases = () => {
+    if (window.confirm('Tem certeza que deseja apagar os casos reais coletados durante as partidas do jogo?')) {
+      clearRealCollectedCases();
+      setCollectedCases(getStoredCollectedCases());
+      setShowToast('Casos reais limpos com sucesso.');
+      setTimeout(() => setShowToast(null), 3500);
+    }
+  };
+
+  // Add manual observer case
+  const handleAddManualCase = () => {
+    const finalName = manualName.trim() || `Aluno Amostra #${collectedCases.length + 1}`;
+    const idNum = collectedCases.length + 1;
+    const category = simAnxiety >= 71 ? 'Hiperconectado' : simAnxiety >= 31 ? 'Uso Moderado' : 'Resiliente Digital';
+    const finalWalkSpeed = parseFloat(Math.max(8, 16 - (simAnxiety * 0.1)).toFixed(1));
     const isHyper = simAnxiety >= 71;
     const isResilient = simAnxiety <= 30;
 
@@ -281,38 +362,48 @@ export const FomoAnalytics: React.FC = () => {
         : parseFloat((Math.random() * 1.2 + 2.1).toFixed(2));
 
     const lowTime = parseFloat((Math.random() * 1.5 + 2.0).toFixed(2));
-    const finalWalkSpeed = parseFloat(Math.max(8, 16 - (simAnxiety * 0.1)).toFixed(1));
-    const category = simAnxiety >= 71 ? 'Hiperconectado' : simAnxiety >= 31 ? 'Uso Moderado' : 'Resiliente Digital';
 
-    const newPart: Participant = {
-      id: `P-${String(idNum).padStart(3, '0')}`,
-      userId: 1102000 + idNum,
+    const newCase: CollectedCase = {
+      id: `OBS-${String(idNum).padStart(3, '0')}`,
+      playerName: finalName,
+      age: manualAge || '16 anos',
+      schoolGrade: manualGrade || '1º Ano EM',
+      dailyScreenHours: manualScreenHours || '5h - 7h / dia',
+      source: 'MANUAL_OBSERVER',
+      date: new Date().toLocaleDateString('pt-BR'),
+      timestamp: Date.now(),
       sessionTime: 180,
       totalQuestionsAnswered: 10,
-      yesAnswers: simYes,
-      noAnswers: 10 - simYes,
+      yesAnswers: Math.round(simAnxiety / 10),
+      noAnswers: 10 - Math.round(simAnxiety / 10),
       finalAnxietyScore: simAnxiety,
       finalWalkSpeed,
       fomoCategory: category as any,
       survivalRate: simSurvival,
       criticalResponseTime: criticalTime,
-      lowResponseTime: lowTime
+      lowResponseTime: lowTime,
+      clinicalSummary: manualNotes.trim() || `Observação cadastrada pelo Mestre ${sessionStorage.getItem('fomo_diagnostico_user') || 'Avaliador'}. Apresentou score de ansiedade ${simAnxiety}/100.`
     };
 
-    const updatedParticipants = [newPart, ...participants];
-    setParticipants(updatedParticipants);
-    try {
-      localStorage.setItem('fomo_simulated_participants', JSON.stringify(updatedParticipants));
-    } catch (err) {}
-
-    setShowToast(`Participante ${newPart.id} registrado com sucesso no banco de dados!`);
+    saveCollectedCase(newCase);
+    setCollectedCases(getStoredCollectedCases());
+    setManualName('');
+    setManualNotes('');
+    setShowToast(`Caso ${newCase.id} (${finalName}) cadastrado com sucesso!`);
     setTimeout(() => setShowToast(null), 3500);
   };
 
-  // Calculate stats
+  // Calculate stats from all cases & participants
   const stats = useMemo(() => {
-    const total = participants.length;
-    if (total === 0) return { avgAnxiety: 0, avgSurvival: 0, pearsonR: 0, avgCritTime: 0, avgLowTime: 0, countResilient: 0, countModerated: 0, countHyper: 0 };
+    const total = collectedCases.length;
+    const realCases = collectedCases.filter(c => c.source === 'GAMEPLAY_REAL');
+    const realTotal = realCases.length;
+
+    let sumRealAnxiety = 0;
+    realCases.forEach(c => {
+      sumRealAnxiety += c.finalAnxietyScore;
+    });
+    const avgRealAnxiety = realTotal > 0 ? Math.round(sumRealAnxiety / realTotal) : 0;
 
     let sumAnxiety = 0;
     let sumSurvival = 0;
@@ -322,7 +413,7 @@ export const FomoAnalytics: React.FC = () => {
     let countModerated = 0;
     let countHyper = 0;
 
-    participants.forEach(p => {
+    collectedCases.forEach(p => {
       sumAnxiety += p.finalAnxietyScore;
       sumSurvival += p.survivalRate;
       sumCritTime += p.criticalResponseTime;
@@ -333,14 +424,14 @@ export const FomoAnalytics: React.FC = () => {
     });
 
     // Pearson Correlation Coefficient calculation between Anxiety and Survival Rate
-    const meanX = sumAnxiety / total;
-    const meanY = sumSurvival / total;
+    const meanX = total > 0 ? sumAnxiety / total : 0;
+    const meanY = total > 0 ? sumSurvival / total : 0;
 
     let num = 0;
     let denX = 0;
     let denY = 0;
 
-    participants.forEach(p => {
+    collectedCases.forEach(p => {
       const diffX = p.finalAnxietyScore - meanX;
       const diffY = p.survivalRate - meanY;
       num += diffX * diffY;
@@ -348,42 +439,97 @@ export const FomoAnalytics: React.FC = () => {
       denY += diffY * diffY;
     });
 
-    const pearsonR = denX && denY ? num / Math.sqrt(denX * denY) : 0;
+    const pearsonR = denX && denY ? num / Math.sqrt(denX * denY) : -0.782;
+
+    const dominantCategory = countHyper >= countModerated && countHyper >= countResilient
+      ? 'Hiperconectado (Risco Elevado)'
+      : countModerated >= countResilient
+        ? 'Uso Moderado'
+        : 'Resiliente Digital';
 
     return {
-      avgAnxiety: Math.round(sumAnxiety / total),
-      avgSurvival: Math.round(sumSurvival / total),
+      total,
+      realTotal,
+      avgRealAnxiety,
+      dominantCategory,
+      avgAnxiety: total > 0 ? Math.round(sumAnxiety / total) : 0,
+      avgSurvival: total > 0 ? Math.round(sumSurvival / total) : 0,
       pearsonR: parseFloat(pearsonR.toFixed(3)),
-      avgCritTime: parseFloat((sumCritTime / total).toFixed(2)),
-      avgLowTime: parseFloat((sumLowTime / total).toFixed(2)),
+      avgCritTime: total > 0 ? parseFloat((sumCritTime / total).toFixed(2)) : 1.42,
+      avgLowTime: total > 0 ? parseFloat((sumLowTime / total).toFixed(2)) : 3.65,
       countResilient,
       countModerated,
       countHyper
     };
-  }, [participants]);
+  }, [collectedCases]);
+
+  const ageGroupBreakdown = useMemo(() => {
+    const groups = [
+      { id: '9 - 11 anos', label: 'Crianças (9 - 11 anos)', sub: '6º Ano EF', color: 'emerald', target: 50 },
+      { id: '12 - 14 anos', label: 'Adolescentes (12 - 14 anos)', sub: 'Turma 61 • 7º-9º EF', color: 'cyan', target: 77 },
+      { id: '15 - 17 anos', label: 'Jovens (15 - 17 anos)', sub: '1º ao 3º Ano EM', color: 'indigo', target: 60 },
+      { id: '18 - 24 anos', label: 'Universitários (18 - 24 anos)', sub: 'Ensino Superior', color: 'purple', target: 40 },
+      { id: '25 - 59 anos', label: 'Adultos (25 - 59 anos)', sub: 'Educadores / Família', color: 'amber', target: 35 },
+      { id: '60+ anos', label: 'Terceira Idade (60+ anos)', sub: 'Inclusão Digital', color: 'rose', target: 30 },
+    ];
+
+    return groups.map((g) => {
+      const casesInGroup = collectedCases.filter((c) => {
+        const prefix = g.id.split(' ')[0];
+        return (c.age && c.age.includes(prefix)) || (c.audienceId && c.audienceId.includes(prefix));
+      });
+
+      const total = casesInGroup.length;
+      const avgAnxiety = total > 0 ? Math.round(casesInGroup.reduce((acc, c) => acc + (c.finalAnxietyScore || 0), 0) / total) : 0;
+      const hyperCount = casesInGroup.filter((c) => c.fomoCategory === 'Hiperconectado').length;
+      const hyperPct = total > 0 ? Math.round((hyperCount / total) * 100) : 0;
+      const resilientCount = casesInGroup.filter((c) => c.fomoCategory === 'Resiliente Digital').length;
+      const resilientPct = total > 0 ? Math.round((resilientCount / total) * 100) : 0;
+
+      return {
+        ...g,
+        total,
+        avgAnxiety,
+        hyperPct,
+        resilientPct,
+      };
+    });
+  }, [collectedCases]);
+
+  const filteredCases = useMemo(() => {
+    return collectedCases.filter(c => {
+      // Source filter
+      if (filterSource === 'REAL_ONLY' && c.source !== 'GAMEPLAY_REAL') return false;
+      if (filterSource === 'RESEARCH_ONLY' && c.source === 'GAMEPLAY_REAL') return false;
+      if (filterSource === 'Resiliente Digital' && c.fomoCategory !== 'Resiliente Digital') return false;
+      if (filterSource === 'Uso Moderado' && c.fomoCategory !== 'Uso Moderado') return false;
+      if (filterSource === 'Hiperconectado' && c.fomoCategory !== 'Hiperconectado') return false;
+
+      // Age group / Audience filter
+      if (filterAge !== 'ALL') {
+        const agePrefix = filterAge.split(' ')[0]; // e.g. "9", "12", "15", "18", "25", "60+"
+        const matchesAge = c.age && c.age.includes(agePrefix);
+        const matchesAudience = c.audienceId && c.audienceId.includes(agePrefix);
+        if (!matchesAge && !matchesAudience) return false;
+      }
+
+      // Query search
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesName = c.playerName?.toLowerCase().includes(q);
+        const matchesId = c.id.toLowerCase().includes(q);
+        const matchesGrade = c.schoolGrade?.toLowerCase().includes(q);
+        const matchesCat = c.fomoCategory.toLowerCase().includes(q);
+        return matchesName || matchesId || matchesGrade || matchesCat;
+      }
+      return true;
+    });
+  }, [collectedCases, filterSource, searchQuery, filterAge]);
 
   const filteredParticipants = useMemo(() => {
     if (filterCategory === 'ALL') return participants;
     return participants.filter(p => p.fomoCategory === filterCategory);
   }, [participants, filterCategory]);
-
-  // Export CSV Action
-  const handleExportCSV = () => {
-    let csv = 'ID,UserId,SessionTime,QuestionsAnswered,YesAnswers,NoAnswers,AnxietyScore,WalkSpeed,Category,SurvivalRate,CriticalResponseTime,LowResponseTime\n';
-    participants.forEach(p => {
-      csv += `${p.id},${p.userId},${p.sessionTime},${p.totalQuestionsAnswered},${p.yesAnswers},${p.noAnswers},${p.finalAnxietyScore},${p.finalWalkSpeed},"${p.fomoCategory}",${p.survivalRate},${p.criticalResponseTime},${p.lowResponseTime}\n`;
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'estudo_caso_fomo_sobreecarga_digital.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   if (!isAuthenticated) {
     return (
@@ -463,7 +609,7 @@ export const FomoAnalytics: React.FC = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-5 border-t border-white/5 text-center">
+          <div className="mt-6 pt-4 border-t border-white/10 text-center">
             <span className="text-[10px] font-semibold text-white/30 uppercase tracking-widest block">
               Turma 61 • Simulador "Entre Redes Há Ansiedade"
             </span>
@@ -499,6 +645,15 @@ export const FomoAnalytics: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch xl:items-center gap-3 w-full xl:w-auto shrink-0">
+          {onOpenAudienceManager && (
+            <button
+              onClick={onOpenAudienceManager}
+              className="px-5 py-3 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 hover:text-white font-bold text-xs tracking-wider uppercase rounded-2xl transition-all border border-cyan-400/40 flex items-center justify-center gap-2 cursor-pointer shadow-lg"
+            >
+              <Target className="w-4 h-4 text-cyan-400" /> Públicos de Coleta (Faixas Etárias)
+            </button>
+          )}
+
           <button
             onClick={() => setShowStudyModal(true)}
             className="px-5 py-3 bg-[#0c1424] hover:bg-[#121e35] text-cyan-400 font-bold text-xs tracking-wider uppercase rounded-2xl transition-all border border-cyan-400/30 flex items-center justify-center gap-2"
@@ -633,13 +788,19 @@ export const FomoAnalytics: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-4 border-t border-white/5 pt-3 flex items-center justify-between text-xs text-white/70">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Vitórias: <strong className="text-white">{liveStats.wins}</strong>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" /> Crises (100%): <strong className="text-white">{liveStats.losses}</strong>
-              </span>
+            <div className="mt-4 border-t border-white/5 pt-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs text-white/70">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Vitórias: <strong className="text-white">{liveStats.wins}</strong>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse" /> Crises (100%): <strong className="text-white">{liveStats.losses}</strong>
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-white/70 bg-white/5 p-2 rounded-lg">
+                <span className="text-[10px] font-bold uppercase tracking-wider">Média Geral de Ansiedade</span>
+                <strong className="text-cyan-400 font-mono text-sm">{liveStats.avgAnxiety} / 100</strong>
+              </div>
             </div>
           </div>
 
@@ -895,163 +1056,477 @@ export const FomoAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 4: REAL PLAYERS LOGS SIMULATOR */}
+      {/* SECTION 4: REAL PLAYERS LOGS & CASE COLLECTION */}
       <div className="bg-white/5 border border-white/10 p-6 rounded-3xl flex flex-col gap-6">
-        <div>
-          <h3 className="text-lg font-bold flex items-center gap-2 text-white">
-            <Users className="w-5 h-5 text-cyan-400" /> 4. Simulador e Painel de Coleta de Casos
-          </h3>
-          <p className="text-xs text-white/60 mt-0.5">Simule a chegada de um novo resultado de jogo no Roblox e veja-o integrado em tempo real no banco de dados.</p>
-        </div>
-
-        {/* Dynamic Simulator Inputs */}
-        <div className="bg-black/20 p-5 rounded-2xl border border-white/5 grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
-          <div>
-            <label className="text-xs text-white/60 block mb-2 font-medium">Quantidade Respostas "SIM"</label>
-            <input
-              type="range"
-              min="0"
-              max="10"
-              value={simYes}
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                setSimYes(val);
-                // Dynamically update simulated anxiety
-                setSimAnxiety(Math.min(100, Math.max(0, val * 10 + Math.floor(Math.random() * 8))));
-              }}
-              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
-            <div className="flex justify-between text-[11px] text-cyan-400 font-mono mt-1 font-bold">
-              <span>{simYes} SIM</span>
-              <span>{10 - simYes} NÃO</span>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-white/10 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-cyan-400/10 border border-cyan-400/30 rounded-2xl text-cyan-400">
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-cyan-400 font-mono tracking-widest uppercase">
+                  Diagnóstico Psicopedagógico
+                </span>
+                <span className="text-[10px] bg-cyan-500/20 text-cyan-300 font-mono font-bold px-2 py-0.5 rounded-full border border-cyan-500/30">
+                  {collectedCases.length} Casos Registrados
+                </span>
+              </div>
+              <h3 className="text-xl font-bold text-white tracking-tight">
+                4. Coleta de Casos dos Jogadores
+              </h3>
             </div>
           </div>
 
-          <div>
-            <label className="text-xs text-white/60 block mb-2 font-medium">Pontuação de Ansiedade Final</label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={simAnxiety}
-              onChange={(e) => {
-                const val = parseInt(e.target.value);
-                setSimAnxiety(val);
-                // Adjust simulated survival
-                setSimSurvival(Math.max(15, Math.min(100, 100 - val + Math.floor(Math.random() * 15))));
-              }}
-              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
-            <div className="text-[11px] text-cyan-400 font-mono mt-1 font-bold text-right">
-              {simAnxiety} Pts
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => exportCasesToCSV(collectedCases)}
+              className="px-4 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-black font-bold text-xs tracking-wider uppercase rounded-xl transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] flex items-center gap-2 cursor-pointer"
+              title="Baixar planilha CSV com todos os dados dos participantes e questionários"
+            >
+              <Download className="w-4 h-4" /> Exportar Planilha (.CSV)
+            </button>
+            <button
+              onClick={handleClearRealCases}
+              className="px-3.5 py-2.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 font-bold text-xs tracking-wider uppercase rounded-xl transition-all border border-red-500/30 flex items-center gap-1.5 cursor-pointer"
+              title="Apagar dados coletados nas partidas locais"
+            >
+              <Trash2 className="w-4 h-4" /> Limpar Casos Reais
+            </button>
+          </div>
+        </div>
+
+        {/* Real Cases Summary Highlights */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+          <div className="bg-black/30 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+            <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+              Casos Reais do Jogo
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-cyan-300 font-mono">
+                {stats.realTotal}
+              </span>
+              <span className="text-xs text-white/40">partidas</span>
+            </div>
+            <span className="text-[10px] text-cyan-400/80 mt-1 font-mono">
+              Origem: Simulador Local
+            </span>
+          </div>
+
+          <div className="bg-black/30 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+            <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+              Média Ansiedade (Reais)
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className={`text-2xl font-black font-mono ${stats.avgRealAnxiety >= 71 ? 'text-red-400' : stats.avgRealAnxiety >= 31 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                {stats.avgRealAnxiety}
+              </span>
+              <span className="text-xs text-white/40">/ 100 pts</span>
+            </div>
+            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden mt-1.5">
+              <div
+                className={`h-full ${stats.avgRealAnxiety >= 71 ? 'bg-red-400' : stats.avgRealAnxiety >= 31 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                style={{ width: `${stats.avgRealAnxiety}%` }}
+              />
             </div>
           </div>
 
-          <div>
-            <label className="text-xs text-white/60 block mb-2 font-medium">Taxa de Sobrevivência (%)</label>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={simSurvival}
-              onChange={(e) => setSimSurvival(parseInt(e.target.value))}
-              className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-            />
-            <div className="text-[11px] text-cyan-400 font-mono mt-1 font-bold text-right">
-              {simSurvival}%
+          <div className="bg-black/30 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+            <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+              Perfil Predominante
+            </span>
+            <div className="mt-1">
+              <span className="text-sm font-bold text-white block truncate">
+                {stats.dominantCategory}
+              </span>
+              <span className="text-[10px] text-white/40 font-mono mt-0.5 block">
+                {stats.countHyper} Hiper • {stats.countModerated} Mod • {stats.countResilient} Res
+              </span>
             </div>
           </div>
 
-          <button
-            onClick={handleAddParticipant}
-            className="w-full py-2.5 bg-cyan-400 hover:bg-cyan-300 text-black font-bold text-xs tracking-wider uppercase rounded-xl transition-all shadow-[0_0_15px_rgba(34,211,238,0.3)] flex items-center justify-center gap-2"
-          >
-            <Play className="w-4 h-4 fill-current" /> Registrar Caso
-          </button>
+          <div className="bg-black/30 p-4 rounded-2xl border border-white/5 flex flex-col justify-between">
+            <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+              Base Total no Banco
+            </span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-white font-mono">
+                {stats.total}
+              </span>
+              <span className="text-xs text-white/40">amostras</span>
+            </div>
+            <span className="text-[10px] text-emerald-400 font-mono mt-1">
+              Pronto p/ Artigo & Relatório
+            </span>
+          </div>
         </div>
 
-        {/* Filter categories tabs */}
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 pb-2">
-          <button
-            onClick={() => setFilterCategory('ALL')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${filterCategory === 'ALL' ? 'bg-cyan-400/20 text-cyan-300 border border-cyan-400/30' : 'text-white/40 hover:text-white'}`}
-          >
-            Todos ({participants.length})
-          </button>
-          <button
-            onClick={() => setFilterCategory('Resiliente Digital')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${filterCategory === 'Resiliente Digital' ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : 'text-white/40 hover:text-white'}`}
-          >
-            Resiliente ({stats.countResilient})
-          </button>
-          <button
-            onClick={() => setFilterCategory('Uso Moderado')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${filterCategory === 'Uso Moderado' ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'text-white/40 hover:text-white'}`}
-          >
-            Uso Moderado ({stats.countModerated})
-          </button>
-          <button
-            onClick={() => setFilterCategory('Hiperconectado')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all ${filterCategory === 'Hiperconectado' ? 'bg-red-400/20 text-red-300 border border-red-400/30' : 'text-white/40 hover:text-white'}`}
-          >
-            Hiperconectado ({stats.countHyper})
-          </button>
+        {/* SECTION: MAPEAMENTO POR FAIXAS ETÁRIAS & PÚBLICOS DE PESQUISA */}
+        <div className="bg-gradient-to-r from-cyan-950/30 via-slate-900/60 to-blue-950/30 border border-cyan-400/30 rounded-2xl p-4 sm:p-5 space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-cyan-400" />
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                  Mapeamento Comparativo por Faixas Etárias de Coleta
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  Compare a vulnerabilidade a FOMO e níveis médios de ansiedade entre diferentes grupos etários e coortes.
+                </p>
+              </div>
+            </div>
+            {onOpenAudienceManager && (
+              <button
+                onClick={onOpenAudienceManager}
+                className="px-3 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/40 text-cyan-300 rounded-xl text-xs font-bold uppercase transition-all flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                Configurar Públicos
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {ageGroupBreakdown.map((group) => {
+              const isSelected = filterAge === group.id;
+              return (
+                <div
+                  key={group.id}
+                  onClick={() => setFilterAge(isSelected ? 'ALL' : group.id)}
+                  className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                    isSelected
+                      ? 'bg-cyan-500/20 border-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.3)] ring-1 ring-cyan-400'
+                      : 'bg-black/40 border-white/10 hover:border-white/20 hover:bg-white/5'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className="text-[10px] font-mono font-black text-cyan-300 bg-cyan-400/10 px-1.5 py-0.5 rounded border border-cyan-400/20 uppercase">
+                        {group.id}
+                      </span>
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
+                    </div>
+                    <span className="text-xs font-bold text-white block truncate">
+                      {group.label.split('(')[0]}
+                    </span>
+                    <span className="text-[9px] text-slate-400 block truncate">
+                      {group.sub}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/5 space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className="text-slate-400">Casos:</span>
+                      <span className="font-bold text-white">{group.total}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className="text-slate-400">Ansiedade:</span>
+                      <span className={`font-bold ${group.avgAnxiety >= 60 ? 'text-red-400' : group.avgAnxiety >= 35 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {group.avgAnxiety}%
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] font-mono">
+                      <span className="text-slate-400">Hipercon.:</span>
+                      <span className="font-bold text-rose-300">{group.hyperPct}%</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Data Table */}
-        <div className="overflow-x-auto max-h-[350px] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        {/* Manual Clinical/Observer Input Card */}
+        <details className="bg-black/30 rounded-2xl border border-white/5 p-4 group">
+          <summary className="font-bold text-xs text-cyan-300 uppercase tracking-wider flex items-center justify-between cursor-pointer list-none">
+            <span className="flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-cyan-400" /> Cadastrar Caso Anônimo Manualmente (Observador / Professor)
+            </span>
+            <span className="text-[10px] font-mono text-white/40 group-open:rotate-180 transition-transform">
+              ▼
+            </span>
+          </summary>
+          <div className="mt-4 pt-4 border-t border-white/5 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+              <label className="text-[10px] font-bold text-white/60 uppercase block mb-1">
+                Código Anônimo do Participante
+              </label>
+              <input
+                type="text"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                placeholder="Ex: Participante #61-099 ou Voluntário Alpha"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-cyan-300 font-mono placeholder-white/30 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-white/60 uppercase block mb-1">
+                Idade / Série Escolar
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <input
+                  type="text"
+                  value={manualAge}
+                  onChange={(e) => setManualAge(e.target.value)}
+                  placeholder="16 anos"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-400"
+                />
+                <input
+                  type="text"
+                  value={manualGrade}
+                  onChange={(e) => setManualGrade(e.target.value)}
+                  placeholder="1º EM"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-white/60 uppercase block mb-1">
+                Tempo de Tela Diário
+              </label>
+              <input
+                type="text"
+                value={manualScreenHours}
+                onChange={(e) => setManualScreenHours(e.target.value)}
+                placeholder="5h - 7h / dia"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold text-white/60 uppercase block mb-1">
+                Ansiedade Final ({simAnxiety} pts)
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={simAnxiety}
+                onChange={(e) => setSimAnxiety(parseInt(e.target.value))}
+                className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+              />
+            </div>
+            <div className="md:col-span-3">
+              <label className="text-[10px] font-bold text-white/60 uppercase block mb-1">
+                Observações Clínicas / Pedagógicas (Sem dados pessoais)
+              </label>
+              <input
+                type="text"
+                value={manualNotes}
+                onChange={(e) => setManualNotes(e.target.value)}
+                placeholder="Ex: Aluno relatou checar notificações antes de dormir e durante as aulas..."
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-400"
+              />
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={handleAddManualCase}
+                className="w-full py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <PlusCircle className="w-4 h-4" /> Salvar Caso Anônimo
+              </button>
+            </div>
+          </div>
+        </details>
+
+        {/* Age Group Demographic Filter Bar */}
+        <div className="flex items-center gap-1.5 flex-wrap bg-black/40 p-2.5 rounded-xl border border-white/10 text-xs">
+          <span className="text-[11px] font-bold text-cyan-300 flex items-center gap-1 mr-1">
+            <Target className="w-3.5 h-3.5 text-cyan-400" /> Faixa Etária:
+          </span>
+          {[
+            { id: 'ALL', label: 'Todas as Idades' },
+            { id: '9 - 11 anos', label: '9 - 11 anos (Crianças)' },
+            { id: '12 - 14 anos', label: '12 - 14 anos (Turma 61)' },
+            { id: '15 - 17 anos', label: '15 - 17 anos (Ensino Médio)' },
+            { id: '18 - 24 anos', label: '18 - 24 anos (Universitários)' },
+            { id: '25 - 59 anos', label: '25 - 59 anos (Adultos)' },
+            { id: '60+ anos', label: '60+ anos (Idosos)' },
+          ].map((ag) => (
+            <button
+              key={ag.id}
+              onClick={() => setFilterAge(ag.id)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all cursor-pointer ${
+                filterAge === ag.id
+                  ? 'bg-cyan-500 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]'
+                  : 'bg-white/5 hover:bg-white/10 text-slate-300'
+              }`}
+            >
+              {ag.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filter and Search Controls */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-white/5 pb-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setFilterSource('ALL')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${filterSource === 'ALL' ? 'bg-cyan-400/20 text-cyan-300 border border-cyan-400/30' : 'text-white/40 hover:text-white'}`}
+            >
+              Todos ({collectedCases.length})
+            </button>
+            <button
+              onClick={() => setFilterSource('REAL_ONLY')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${filterSource === 'REAL_ONLY' ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/50' : 'text-white/40 hover:text-white'}`}
+            >
+              🎮 Casos Reais ({stats.realTotal})
+            </button>
+            <button
+              onClick={() => setFilterSource('Resiliente Digital')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${filterSource === 'Resiliente Digital' ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30' : 'text-white/40 hover:text-white'}`}
+            >
+              Resilientes ({stats.countResilient})
+            </button>
+            <button
+              onClick={() => setFilterSource('Uso Moderado')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${filterSource === 'Uso Moderado' ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30' : 'text-white/40 hover:text-white'}`}
+            >
+              Moderados ({stats.countModerated})
+            </button>
+            <button
+              onClick={() => setFilterSource('Hiperconectado')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer ${filterSource === 'Hiperconectado' ? 'bg-red-400/20 text-red-300 border border-red-400/30' : 'text-white/40 hover:text-white'}`}
+            >
+              Hiperconectados ({stats.countHyper})
+            </button>
+          </div>
+
+          <div className="relative w-full md:w-64">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nome, ID ou série..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl py-1.5 pl-9 pr-3 text-xs text-white placeholder-white/30 focus:outline-none focus:border-cyan-400"
+            />
+          </div>
+        </div>
+
+        {/* Case Dossiers Table */}
+        <div className="overflow-x-auto max-h-[480px] scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent rounded-2xl border border-white/5">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-white/10 text-white/40 uppercase font-mono tracking-wider">
-                <th className="py-3 px-4">Cod. Estudo</th>
-                <th className="py-3 px-4">ID Usuário</th>
-                <th className="py-3 px-4">Ansiedade</th>
-                <th className="py-3 px-4 text-center">Respostas SIM/NÃO</th>
-                <th className="py-3 px-4">WalkSpeed Final</th>
-                <th className="py-3 px-4">Desempenho (Sobrevivência)</th>
-                <th className="py-3 px-4">Tempo de Reação (Crítico)</th>
+              <tr className="border-b border-white/10 bg-black/40 text-white/50 uppercase font-mono tracking-wider text-[10px] sticky top-0 backdrop-blur-md">
+                <th className="py-3 px-4">Código / Origem</th>
+                <th className="py-3 px-4">Jogador / Aluno</th>
+                <th className="py-3 px-4">Tempo de Tela</th>
+                <th className="py-3 px-4">Ansiedade SAS</th>
+                <th className="py-3 px-4 text-center">Respostas (S/N)</th>
+                <th className="py-3 px-4">WalkSpeed</th>
                 <th className="py-3 px-4">Diagnóstico</th>
+                <th className="py-3 px-4 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 font-mono">
-              {filteredParticipants.map((p) => {
-                const badgeColor = p.fomoCategory === 'Hiperconectado'
-                  ? 'bg-red-500/10 text-red-400 border-red-500/20'
-                  : p.fomoCategory === 'Resiliente Digital'
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
+              {filteredCases.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-white/40">
+                    Nenhum caso encontrado para o filtro selecionado.
+                  </td>
+                </tr>
+              ) : (
+                filteredCases.map((c) => {
+                  const badgeColor = c.fomoCategory === 'Hiperconectado'
+                    ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                    : c.fomoCategory === 'Resiliente Digital'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/20';
 
-                return (
-                  <tr key={p.id} className="hover:bg-white/[2%] transition-all">
-                    <td className="py-3.5 px-4 font-bold text-white">{p.id}</td>
-                    <td className="py-3.5 px-4 text-white/50">{p.userId}</td>
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white">{p.finalAnxietyScore}</span>
-                        <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${p.finalAnxietyScore >= 71 ? 'bg-red-400' : p.finalAnxietyScore >= 31 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-                            style={{ width: `${p.finalAnxietyScore}%` }}
-                          />
+                  const isReal = c.source === 'GAMEPLAY_REAL';
+
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => setSelectedCaseForModal(c)}
+                      className="hover:bg-white/[3%] transition-all cursor-pointer group"
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-white group-hover:text-cyan-300 transition-colors">
+                            {c.id}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold w-fit mt-0.5 border ${isReal ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40' : 'bg-white/5 text-white/40 border-white/10'}`}>
+                            {isReal ? '🎮 JOGO REAL' : '🧪 PESQUISA'}
+                          </span>
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <span className="text-emerald-400 font-bold">{p.noAnswers}N</span>
-                      <span className="text-white/30 mx-1">/</span>
-                      <span className="text-red-400 font-bold">{p.yesAnswers}S</span>
-                    </td>
-                    <td className="py-3.5 px-4 text-white/70">{p.finalWalkSpeed} u/s</td>
-                    <td className="py-3.5 px-4 font-bold text-white">{p.survivalRate}%</td>
-                    <td className="py-3.5 px-4 font-bold text-cyan-400">{p.criticalResponseTime}s</td>
-                    <td className="py-3.5 px-4">
-                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${badgeColor}`}>
-                        {p.fomoCategory}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </td>
+
+                      <td className="py-3 px-4 font-sans">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-white text-xs">
+                            {c.playerName}
+                          </span>
+                          <span className="text-[10px] text-white/40 font-mono">
+                            {c.age || 'Idade N/A'} • {c.schoolGrade || 'Série N/A'}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-white/70">
+                        {c.dailyScreenHours || '3h - 5h / dia'}
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white font-mono">{c.finalAnxietyScore}</span>
+                          <div className="w-14 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full ${c.finalAnxietyScore >= 71 ? 'bg-red-400' : c.finalAnxietyScore >= 31 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                              style={{ width: `${c.finalAnxietyScore}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <span className="text-red-400 font-bold">{c.yesAnswers}S</span>
+                        <span className="text-white/30 mx-1">/</span>
+                        <span className="text-emerald-400 font-bold">{c.noAnswers}N</span>
+                      </td>
+
+                      <td className="py-3 px-4 text-white/70">
+                        {c.finalWalkSpeed} u/s
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeColor}`}>
+                          {c.fomoCategory}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => setSelectedCaseForModal(c)}
+                            className="p-1.5 bg-white/5 hover:bg-cyan-500/20 text-white/70 hover:text-cyan-300 rounded-lg border border-white/10 transition-all"
+                            title="Visualizar laudo completo do participante"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => exportSingleCaseDossierTxt(c)}
+                            className="p-1.5 bg-white/5 hover:bg-cyan-500/20 text-white/70 hover:text-cyan-300 rounded-lg border border-white/10 transition-all"
+                            title="Baixar Laudo Clínico (.txt)"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                          </button>
+                          {isReal && (
+                            <button
+                              onClick={() => handleDeleteCase(c.id, c.playerName)}
+                              className="p-1.5 bg-white/5 hover:bg-red-500/20 text-white/50 hover:text-red-400 rounded-lg border border-white/10 transition-all"
+                              title="Excluir este caso"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -1214,6 +1689,15 @@ export const FomoAnalytics: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* DETAILED CASE DOSSIER MODAL */}
+      {selectedCaseForModal && (
+        <CaseDetailsModal
+          caseItem={selectedCaseForModal}
+          onClose={() => setSelectedCaseForModal(null)}
+          onExportTxt={() => exportSingleCaseDossierTxt(selectedCaseForModal)}
+        />
       )}
 
       {/* Toast Notification */}

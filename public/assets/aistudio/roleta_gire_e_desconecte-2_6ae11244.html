@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gire e Desconecte! • Simulador Entre Redes Há Ansiedade</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
+    background: linear-gradient(135deg, #eef6ff 0%, #f8eefb 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 18px;
+    color: #18346b;
+  }
+  .app {
+    width: min(920px, 100%);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .top-nav {
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  .btn-voltar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    background: #183d7a;
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 800;
+    font-size: 14px;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(24, 61, 122, 0.25);
+    transition: transform 0.15s, background 0.15s, box-shadow 0.15s;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-voltar:hover {
+    background: #102952;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(24, 61, 122, 0.35);
+  }
+  .btn-voltar:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 6px rgba(24, 61, 122, 0.25);
+  }
+  h1 {
+    margin: 0 0 4px;
+    font-size: clamp(28px, 6vw, 48px);
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #173c7b;
+  }
+  .subtitle {
+    margin: 0 0 16px;
+    color: #38527e;
+    font-size: clamp(14px, 3vw, 19px);
+    font-weight: 500;
+  }
+  .wheel-wrap {
+    position: relative;
+    width: min(84vw, 680px);
+    aspect-ratio: 1;
+    margin: 0 auto 16px;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    filter: drop-shadow(0 12px 18px rgba(0,0,0,.18));
+  }
+  .pointer {
+    position: absolute;
+    z-index: 3;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 24px solid transparent;
+    border-right: 24px solid transparent;
+    border-top: 48px solid #d72d37;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,.3));
+  }
+  .pointer::after {
+    content: "";
+    position: absolute;
+    top: -43px;
+    left: -8px;
+    width: 16px;
+    height: 16px;
+    background: #ffd94d;
+    border-radius: 50%;
+    border: 2px solid #9b6d00;
+  }
+  button#spin {
+    border: 0;
+    border-radius: 999px;
+    padding: 16px 38px;
+    font-size: clamp(18px, 4vw, 22px);
+    font-weight: 900;
+    cursor: pointer;
+    color: white;
+    background: #ef3e54;
+    box-shadow: 0 6px 0 #b52538, 0 10px 20px rgba(239, 62, 84, 0.35);
+    transition: transform .12s, filter .12s, box-shadow .12s;
+    touch-action: manipulation;
+  }
+  button#spin:hover { filter: brightness(1.06); }
+  button#spin:active { transform: translateY(4px); box-shadow: 0 2px 0 #b52538, 0 4px 10px rgba(239, 62, 84, 0.25); }
+  button#spin:disabled { opacity: .65; cursor: not-allowed; transform: none; box-shadow: 0 6px 0 #b52538; }
+  #result {
+    min-height: 58px;
+    margin: 18px auto 0;
+    max-width: 680px;
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: 18px;
+    background: white;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+    font-size: clamp(16px, 3.5vw, 23px);
+    font-weight: 800;
+    color: #18346b;
+    border: 1px solid rgba(24, 61, 122, 0.1);
+  }
+  .small {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #667085;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <div class="top-nav">
+      <a href="/" onclick="voltarParaOJogo(event)" class="btn-voltar">
+        ⬅ Voltar para o Jogo
+      </a>
+    </div>
+
+    <h1>GIRE E DESCONECTE!</h1>
+    <p class="subtitle">Pequenas escolhas podem transformar o seu dia 💙</p>
+
+    <div class="wheel-wrap">
+      <div class="pointer"></div>
+      <canvas id="wheel" width="900" height="900"></canvas>
+    </div>
+
+    <button id="spin">🎯 GIRAR A ROLETA</button>
+    <div id="result">Clique em “GIRAR A ROLETA” para começar!</div>
+    <div class="small">A roleta escolhe uma atividade aleatoriamente para sua pausa saudável.</div>
+  </div>
+
+<script>
+function voltarParaOJogo(event) {
+  event.preventDefault();
+  // Se veio de outra página/aba ou histórico disponível, volta sem recarregar tudo
+  if (window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.href = '/';
+  }
+}
+
+const activities = [
+  "Ler algumas páginas de um livro",
+  "Fazer um desenho ou pintura",
+  "Montar um quebra-cabeça",
+  "Ouvir uma música",
+  "Dar uma caminhada",
+  "Praticar um esporte",
+  "Fazer alguns minutos de respiração/relaxamento",
+  "Preparar uma receita simples com a família",
+  "Jogar um jogo de tabuleiro",
+  "Cuidar de uma planta",
+  "Escrever ou desenhar como estou me sentindo",
+  "Conversar com alguém pessoalmente",
+  "Brincar com um animal de estimação",
+  "Fazer uma atividade de fotografia sem postar",
+  "Criar uma brincadeira com amigos",
+  "Passar um tempo ao ar livre"
+];
+
+const colors = [
+  "#e9dcb2","#e9cda6","#e9b8bc","#cbb8dc",
+  "#b8d7e9","#b9d99f","#dfe7a7","#b9ded6",
+  "#e8b8c8","#d9c4e3","#c9b9df","#a9cbe2",
+  "#d8d9aa","#c6d89b","#dfb9c6","#b8d5e8"
+];
+
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+const spinBtn = document.getElementById("spin");
+const result = document.getElementById("result");
+const n = activities.length;
+const arc = (Math.PI * 2) / n;
+let rotation = 0;
+let spinning = false;
+
+function drawWheel() {
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const radius = 420;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // outer ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 18, 0, Math.PI * 2);
+  ctx.fillStyle = "#183d7a";
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 7, 0, Math.PI * 2);
+  ctx.fillStyle = "#f7f7f4";
+  ctx.fill();
+
+  for (let i = 0; i < n; i++) {
+    const start = -Math.PI / 2 + i * arc + rotation;
+    const end = start + arc;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, start, end);
+    ctx.closePath();
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+
+    // number circle
+    const mid = start + arc / 2;
+    const nr = 355;
+    const nx = cx + Math.cos(mid) * nr;
+    const ny = cy + Math.sin(mid) * nr;
+    ctx.beginPath();
+    ctx.arc(nx, ny, 27, 0, Math.PI * 2);
+    ctx.fillStyle = ["#2877b9","#e36b27","#bf3f56","#704e9e",
+                     "#2c78b8","#45a33e","#3b91a7","#2b8f82",
+                     "#bd3d7a","#54a63c","#c43d78","#2877b9",
+                     "#a36b17","#4d9b35","#a43d68","#2877b9"][i];
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 25px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(i + 1, nx, ny);
+
+    // text
+    const tr = 275;
+    const tx = cx + Math.cos(mid) * tr;
+    const ty = cy + Math.sin(mid) * tr;
+    drawWrappedText(activities[i], tx, ty, 135, 21);
+  }
+
+  // center circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, 177, 0, Math.PI * 2);
+  ctx.fillStyle = "#f7f7f4";
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "#183d7a";
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "900 44px Arial";
+  ctx.fillStyle = "#173c7b";
+  ctx.fillText("GIRE E", cx, cy - 35);
+  ctx.fillStyle = "#d83845";
+  ctx.fillText("DESCONECTE!", cx, cy + 22);
+  ctx.font = "bold 22px Arial";
+  ctx.fillStyle = "#18346b";
+  ctx.fillText("💙", cx, cy + 72);
+}
+
+function drawWrappedText(text, x, y, maxWidth, lineHeight) {
+  const words = text.split(" ");
+  const lines = [];
+  let line = "";
+  ctx.font = "bold 18px Arial";
+  for (const word of words) {
+    const test = line ? line + " " + word : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else line = test;
+  }
+  if (line) lines.push(line);
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((l, idx) => ctx.fillText(l, x, startY + idx * lineHeight));
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function spin() {
+  if (spinning) return;
+  spinning = true;
+  spinBtn.disabled = true;
+  result.textContent = "🎡 Girando a roleta...";
+
+  const chosen = Math.floor(Math.random() * n);
+
+  // Pointer is at top. Choose rotation so chosen segment center ends at top.
+  const targetCenter = chosen * arc + arc / 2;
+  const desired = -targetCenter;
+  const currentNorm = ((rotation % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const desiredNorm = ((desired % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  let delta = desiredNorm - currentNorm;
+  if (delta < 0) delta += Math.PI * 2;
+
+  const extraTurns = 6 + Math.floor(Math.random() * 3);
+  const startRotation = rotation;
+  const endRotation = rotation + extraTurns * Math.PI * 2 + delta;
+  const duration = 4200;
+  const startTime = performance.now();
+
+  function animate(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    rotation = startRotation + (endRotation - startRotation) * easeOutCubic(t);
+    drawWheel();
+    if (t < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      rotation = endRotation;
+      drawWheel();
+      result.innerHTML = "✨ <strong>Você tirou:</strong> " + activities[chosen] + "!";
+      spinning = false;
+      spinBtn.disabled = false;
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+spinBtn.addEventListener("click", spin);
+drawWheel();
+</script>
+</body>
+</html>

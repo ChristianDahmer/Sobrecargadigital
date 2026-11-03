@@ -1,6 +1,6 @@
 {
   "name": "Entre redes há ansiedade",
-  "description": "Simulador interativo e painel de análise diagnóstica sobre o impacto do uso de redes sociais e ansiedade (FOMO).",
+  "description": "Ferramenta interativa de coleta de dados e pesquisa para mensuração do índice de ansiedade (FOMO) e hábitos de uso das redes sociais em grupos.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
